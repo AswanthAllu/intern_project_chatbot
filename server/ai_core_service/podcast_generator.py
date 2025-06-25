@@ -7,6 +7,7 @@ import pyttsx3
 from gtts import gTTS
 import json
 import re
+import random # ✅ Import the random module
 
 logger = logging.getLogger(__name__)
 
@@ -58,31 +59,35 @@ def generate_advanced_podcast_script(text_content: str, api_keys: dict):
         logger.error(f"Error during Gemini advanced script generation: {e}", exc_info=True)
         return None
 
-# ✅ NEW: A helper function to normalize any audio file into a standard WAV format.
-def _normalize_audio_segment(input_path: str, output_path: str):
-    """Converts any audio input to a standard WAV format for concatenation."""
+def _normalize_audio_segment(input_path: str, output_path: str, speed_factor=1.0):
+    """Converts any audio input to a standard WAV format, optionally changing the speed."""
     if not os.path.exists(input_path):
         logger.warning(f"Normalization skipped: Input file not found at {input_path}")
         return
     
-    # Command to convert to a standard format: 16-bit PCM, 44.1kHz sample rate, mono channel
+    # Build the ffmpeg command with an optional atempo filter
     command = [
         FFMPEG_EXECUTABLE,
         '-i', input_path,
         '-y',
+    ]
+    # ✅ Add the atempo filter only if the speed factor is not 1.0
+    if speed_factor != 1.0:
+        command.extend(['-filter:a', f"atempo={speed_factor}"])
+    
+    command.extend([
         '-acodec', 'pcm_s16le',
         '-ar', '44100',
         '-ac', '1',
         output_path
-    ]
+    ])
+    
     try:
         subprocess.run(command, check=True, capture_output=True, text=True)
     finally:
-        # Clean up the original temp file after normalization
         if os.path.exists(input_path):
             os.remove(input_path)
 
-# ✅ REWRITTEN: This function now uses the hybrid approach with normalization.
 def synthesize_and_normalize_audio(script, output_filename_base):
     """
     Creates individual audio clips, normalizes them to a standard WAV format,
@@ -93,7 +98,6 @@ def synthesize_and_normalize_audio(script, output_filename_base):
     concat_file_path = os.path.join(PODCAST_OUTPUT_DIR, f"{output_filename_base}_concat.txt")
     
     try:
-        # Get the male voice ID from pyttsx3
         engine = pyttsx3.init('sapi5' if platform.system() == 'Windows' else None)
         male_voice_id = engine.getProperty('voices')[0].id
         engine.stop()
@@ -103,24 +107,27 @@ def synthesize_and_normalize_audio(script, output_filename_base):
                 speaker, line = part.get("speaker"), part.get("line")
                 if not all([speaker, line]): continue
 
-                temp_raw_audio_path = os.path.join(PODCAST_OUTPUT_DIR, f"temp_raw_{i}.mp3") # Use mp3 for gtts
+                temp_raw_audio_path = os.path.join(PODCAST_OUTPUT_DIR, f"temp_raw_{i}.mp3")
                 temp_normalized_wav_path = os.path.join(PODCAST_OUTPUT_DIR, f"temp_norm_{i}.wav")
 
                 if speaker == "Brenda":
-                    tts = gTTS(text=line, lang='en', slow=True)
+                    # Use gTTS for the female voice. It's naturally well-paced.
+                    tts = gTTS(text=line, lang='en', tld='co.uk')
                     tts.save(temp_raw_audio_path)
-                    _normalize_audio_segment(temp_raw_audio_path, temp_normalized_wav_path)
+                    # ✅ Speed up the female voice slightly to 1.1x the original speed
+                    _normalize_audio_segment(temp_raw_audio_path, temp_normalized_wav_path, speed_factor=1.1)
                 
                 elif speaker == "Alex":
                     engine = pyttsx3.init('sapi5' if platform.system() == 'Windows' else None)
                     engine.setProperty('voice', male_voice_id)
-                    engine.setProperty('rate', 145)
+                    # ✅ Vary the male voice rate slightly for each line to sound more natural
+                    engine.setProperty('rate', random.randint(140, 155))
                     
-                    # pyttsx3 can only save to wav or mp3, but wav is better for intermediate files
                     temp_raw_audio_path = os.path.join(PODCAST_OUTPUT_DIR, f"temp_raw_{i}.wav")
                     engine.save_to_file(line, temp_raw_audio_path)
                     engine.runAndWait()
                     engine.stop()
+                    # Normalize without changing speed, as we already set the rate
                     _normalize_audio_segment(temp_raw_audio_path, temp_normalized_wav_path)
 
                 if os.path.exists(temp_normalized_wav_path):
@@ -130,7 +137,6 @@ def synthesize_and_normalize_audio(script, output_filename_base):
         return normalized_files, concat_file_path
     except Exception as e:
         logger.error(f"Error during audio synthesis and normalization: {e}", exc_info=True)
-        # Cleanup all partial files on error
         for file_path in normalized_files:
             if os.path.exists(file_path): os.remove(file_path)
         if os.path.exists(concat_file_path): os.remove(concat_file_path)
@@ -158,7 +164,6 @@ def combine_and_convert_with_ffmpeg(concat_file_path: str, output_mp3: str, temp
         logger.error(f"ffmpeg processing failed: {e}", exc_info=True)
         raise
     finally:
-        # Cleanup all temporary normalized files
         for file_path in temp_files:
             if os.path.exists(file_path): os.remove(file_path)
         if os.path.exists(concat_file_path): os.remove(concat_file_path)
