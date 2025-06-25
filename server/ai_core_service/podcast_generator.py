@@ -7,13 +7,32 @@ import pyttsx3
 from gtts import gTTS
 import json
 import re
-import random # ✅ Import the random module
+import random
+import time # ✅ Import the time module for checking file age
 
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
 PODCAST_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'generated_podcasts')
 FFMPEG_EXECUTABLE = "C:/ProgramData/chocolatey/bin/ffmpeg.exe"
+# ✅ NEW: Set the maximum age for podcast files in seconds (e.g., 1 hour = 3600 seconds)
+MAX_FILE_AGE_SECONDS = 3600
+
+# ✅ NEW: Cleanup function to delete old files
+def cleanup_old_podcasts():
+    """Scans the podcast directory and deletes files older than MAX_FILE_AGE_SECONDS."""
+    logger.info("Running cleanup of old podcast files...")
+    now = time.time()
+    try:
+        for filename in os.listdir(PODCAST_OUTPUT_DIR):
+            file_path = os.path.join(PODCAST_OUTPUT_DIR, filename)
+            # Check if it's a file and if it's older than the max age
+            if os.path.isfile(file_path) and (now - os.path.getmtime(file_path)) > MAX_FILE_AGE_SECONDS:
+                logger.info(f"Deleting old file: {filename}")
+                os.remove(file_path)
+    except Exception as e:
+        logger.error(f"Error during podcast cleanup: {e}", exc_info=True)
+
 
 # --- LLM Prompt for Advanced Scripting (Unchanged) ---
 def generate_advanced_podcast_script(text_content: str, api_keys: dict):
@@ -65,13 +84,11 @@ def _normalize_audio_segment(input_path: str, output_path: str, speed_factor=1.0
         logger.warning(f"Normalization skipped: Input file not found at {input_path}")
         return
     
-    # Build the ffmpeg command with an optional atempo filter
     command = [
         FFMPEG_EXECUTABLE,
         '-i', input_path,
         '-y',
     ]
-    # ✅ Add the atempo filter only if the speed factor is not 1.0
     if speed_factor != 1.0:
         command.extend(['-filter:a', f"atempo={speed_factor}"])
     
@@ -111,23 +128,19 @@ def synthesize_and_normalize_audio(script, output_filename_base):
                 temp_normalized_wav_path = os.path.join(PODCAST_OUTPUT_DIR, f"temp_norm_{i}.wav")
 
                 if speaker == "Brenda":
-                    # Use gTTS for the female voice. It's naturally well-paced.
                     tts = gTTS(text=line, lang='en', tld='co.uk')
                     tts.save(temp_raw_audio_path)
-                    # ✅ Speed up the female voice slightly to 1.1x the original speed
                     _normalize_audio_segment(temp_raw_audio_path, temp_normalized_wav_path, speed_factor=1.1)
                 
                 elif speaker == "Alex":
                     engine = pyttsx3.init('sapi5' if platform.system() == 'Windows' else None)
                     engine.setProperty('voice', male_voice_id)
-                    # ✅ Vary the male voice rate slightly for each line to sound more natural
                     engine.setProperty('rate', random.randint(140, 155))
                     
                     temp_raw_audio_path = os.path.join(PODCAST_OUTPUT_DIR, f"temp_raw_{i}.wav")
                     engine.save_to_file(line, temp_raw_audio_path)
                     engine.runAndWait()
                     engine.stop()
-                    # Normalize without changing speed, as we already set the rate
                     _normalize_audio_segment(temp_raw_audio_path, temp_normalized_wav_path)
 
                 if os.path.exists(temp_normalized_wav_path):
@@ -170,6 +183,9 @@ def combine_and_convert_with_ffmpeg(concat_file_path: str, output_mp3: str, temp
 
 def create_podcast_from_text(document_text: str, output_filename_base: str, api_keys: dict) -> str:
     """Main orchestrator function."""
+    # ✅ Call the cleanup function at the start of every new podcast generation.
+    cleanup_old_podcasts()
+    
     script = generate_advanced_podcast_script(document_text, api_keys)
     if not script:
         raise ValueError("Failed to generate a valid podcast script.")
