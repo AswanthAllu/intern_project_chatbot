@@ -4,43 +4,31 @@ import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-d
 import { CircularProgress } from '@mui/material';
 
 import { ThemeProvider } from './context/ThemeContext';
+import { ChatProvider } from './context/ChatContext'; // ✅ Import the new provider
 
-// Lazy load components
+// ... (Lazy load components and route helpers are unchanged)
 const AuthPage = React.lazy(() => import('./components/AuthPage'));
 const ChatPage = React.lazy(() => import('./components/ChatPage'));
 const SettingsPage = React.lazy(() => import('./components/SettingsPage'));
-
-// ==================================================================
-//  START OF NEW FEATURE MODIFICATION
-// ==================================================================
 const AdminPanel = React.lazy(() => import('./components/AdminPanel'));
-
-// Helper component for protected routes
 const ProtectedRoute = ({ children }) => {
     const isAuthenticated = !!localStorage.getItem('userId');
     return isAuthenticated ? children : <Navigate to="/login" replace />;
 };
-
-// Helper component for admin-only routes
 const AdminRoute = ({ children }) => {
     const isAuthenticated = !!localStorage.getItem('userId');
-    const userRole = localStorage.getItem('userRole'); // We will save this upon login
-    
+    const userRole = localStorage.getItem('userRole');
     if (!isAuthenticated) {
         return <Navigate to="/login" replace />;
     }
-    return userRole === 'admin' ? children : <Navigate to="/chat" replace />; // Redirect non-admins to chat
+    return userRole === 'admin' ? children : <Navigate to="/chat" replace />;
 };
-// ==================================================================
-//  END OF NEW FEATURE MODIFICATION
-// ==================================================================
-
-
 const LoadingFallback = () => (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
     </div>
 );
+
 
 function App() {
     const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('userId'));
@@ -59,61 +47,56 @@ function App() {
 
     return (
         <ThemeProvider>
-            <Router>
-                <div className="app-container">
-                    <Suspense fallback={<LoadingFallback />}>
-                        <Routes>
-                            <Route
-                                path="/login"
-                                element={
-                                    !isAuthenticated ? (
-                                        <AuthPage setIsAuthenticated={setIsAuthenticated} />
-                                    ) : (
-                                        <Navigate to="/chat" replace />
-                                    )
-                                }
-                            />
-                            <Route
-                                path="/chat"
-                                element={
-                                    <ProtectedRoute>
-                                        <ChatPage setIsAuthenticated={setIsAuthenticated} />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            <Route
-                                path="/settings"
-                                element={
-                                    <ProtectedRoute>
-                                        <SettingsPage />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            
-                            {/* ================================================================== */}
-                            {/* START OF NEW FEATURE MODIFICATION: Add the admin route */}
-                            {/* ================================================================== */}
-                            <Route
-                                path="/admin"
-                                element={
-                                    <AdminRoute>
-                                        <AdminPanel />
-                                    </AdminRoute>
-                                }
-                            />
-                            {/* ================================================================== */}
-                            {/* END OF NEW FEATURE MODIFICATION */}
-                            {/* ================================================================== */}
-
-                            <Route
-                                path="/"
-                                element={<Navigate to={isAuthenticated ? "/chat" : "/login"} replace />}
-                            />
-                            <Route path="*" element={<Navigate to="/" replace />} />
-                        </Routes>
-                    </Suspense>
-                </div>
-            </Router>
+            {/* ✅ Wrap the entire router in the ChatProvider */}
+            <ChatProvider>
+                <Router>
+                    <div className="app-container">
+                        <Suspense fallback={<LoadingFallback />}>
+                            <Routes>
+                                <Route
+                                    path="/login"
+                                    element={
+                                        !isAuthenticated ? (
+                                            <AuthPage setIsAuthenticated={setIsAuthenticated} />
+                                        ) : (
+                                            <Navigate to="/chat" replace />
+                                        )
+                                    }
+                                />
+                                <Route
+                                    path="/chat"
+                                    element={
+                                        <ProtectedRoute>
+                                            <ChatPage setIsAuthenticated={setIsAuthenticated} />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/settings"
+                                    element={
+                                        <ProtectedRoute>
+                                            <SettingsPage />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/admin"
+                                    element={
+                                        <AdminRoute>
+                                            <AdminPanel />
+                                        </AdminRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/"
+                                    element={<Navigate to={isAuthenticated ? "/chat" : "/login"} replace />}
+                                />
+                                <Route path="*" element={<Navigate to="/" replace />} />
+                            </Routes>
+                        </Suspense>
+                    </div>
+                </Router>
+            </ChatProvider>
         </ThemeProvider>
     );
 }

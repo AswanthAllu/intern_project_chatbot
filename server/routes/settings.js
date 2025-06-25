@@ -6,10 +6,10 @@ const { encrypt, decrypt } = require('../services/encryptionService');
 
 const router = express.Router();
 
-// --- GET /api/settings (Unchanged) ---
+// --- GET /api/settings ---
 router.get('/', tempAuth, async (req, res) => {
     try {
-        const user = await User.findById(req.user.id).select('+geminiApiKey +grokApiKey');
+        const user = await User.findById(req.user.id).select('+geminiApiKey +grokApiKey +apiKeyAccessRequest');
         if (!user) {
             return res.status(404).json({ message: 'User not found.' });
         }
@@ -17,6 +17,7 @@ router.get('/', tempAuth, async (req, res) => {
             geminiApiKey: user.geminiApiKey ? decrypt(user.geminiApiKey) : '',
             grokApiKey: user.grokApiKey ? decrypt(user.grokApiKey) : '',
             ollamaHost: user.ollamaHost || '',
+            apiKeyAccessRequest: user.apiKeyAccessRequest 
         };
         res.status(200).json(settings);
     } catch (error) {
@@ -26,7 +27,7 @@ router.get('/', tempAuth, async (req, res) => {
 });
 
 
-// --- POST /api/settings (MODIFIED FOR NEW SPECIFICATION) ---
+// --- POST /api/settings ---
 router.post('/', tempAuth, async (req, res) => {
     const { geminiApiKey, grokApiKey, ollamaHost } = req.body;
     const userId = req.user.id;
@@ -37,17 +38,11 @@ router.post('/', tempAuth, async (req, res) => {
             return res.status(404).json({ message: 'User not found.' });
         }
 
-        // ==================================================================
-        //  START OF THE DEFINITIVE FIX
-        // ==================================================================
-
         const isProvidingPersonalKeys = geminiApiKey || grokApiKey;
 
         if (isProvidingPersonalKeys) {
             console.log(`User ${userId} is providing personal API keys. Resetting API key access status.`);
             
-            // If the user provides their own keys, their admin access status is reset.
-            // This ensures their personal keys are prioritized from now on.
             user.apiKeyAccessRequest.status = 'none';
             user.apiKeyAccessRequest.requestedAt = null;
             user.apiKeyAccessRequest.processedAt = null;
@@ -58,11 +53,6 @@ router.post('/', tempAuth, async (req, res) => {
             user.hasProvidedApiKeys = true;
         }
         
-        // ==================================================================
-        //  END OF THE DEFINITIVE FIX
-        // ==================================================================
-
-        // Update Ollama host regardless of key changes.
         user.ollamaHost = ollamaHost || null; 
 
         await user.save();

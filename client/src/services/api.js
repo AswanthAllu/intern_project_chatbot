@@ -1,15 +1,14 @@
 // client/src/services/api.js
 import axios from 'axios';
 
-// Dynamically determine API Base URL
+// Dynamically determine API Base URL for the Node.js server
 const getApiBaseUrl = () => {
-    const backendPort = process.env.REACT_APP_BACKEND_PORT || 5003;
+    const backendPort = process.env.REACT_APP_BACKEND_PORT || 5001;
     const hostname = window.location.hostname;
     const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
     const backendHost = (hostname === 'localhost' || hostname === '127.0.0.1') ? 'localhost' : hostname;
     return `${protocol}//${backendHost}:${backendPort}/api`;
 };
-
 const API_BASE_URL = getApiBaseUrl();
 const api = axios.create({ baseURL: API_BASE_URL });
 
@@ -23,24 +22,14 @@ export const signupUser = (userData) => api.post('/auth/signup', userData);
 export const signinUser = (userData) => api.post('/auth/signin', userData);
 export const requestAdminKeyAccess = () => api.post('/auth/request-access');
 
-
 // --- USER SETTINGS ---
 export const getUserSettings = () => api.get('/settings');
 export const saveUserSettings = (settingsData) => api.post('/settings', settingsData);
-
-
-// ==================================================================
-//  START OF NEW FEATURE MODIFICATION
-// ==================================================================
 
 // --- ADMIN PANEL ---
 export const getAdminAccessRequests = () => api.get('/admin/requests');
 export const processAdminRequest = (userId, isApproved) => api.post('/admin/approve', { userId, isApproved });
 export const getAcceptedUsers = () => api.get('/admin/accepted');
-// ==================================================================
-//  END OF NEW FEATURE MODIFICATION
-// ==================================================================
-
 
 // --- CHAT & HISTORY ---
 export const sendMessage = (messageData) => api.post('/chat/message', messageData);
@@ -49,16 +38,26 @@ export const getChatSessions = () => api.get('/chat/sessions');
 export const getSessionDetails = (sessionId) => api.get(`/chat/session/${sessionId}`);
 export const deleteChatSession = (sessionId) => api.delete(`/chat/session/${sessionId}`);
 
-
 // --- FILE UPLOAD & MANAGEMENT ---
 export const uploadFile = (formData) => api.post('/upload', formData);
 export const getUserFiles = () => api.get('/files');
 export const renameUserFile = (serverFilename, newOriginalName) => api.patch(`/files/${serverFilename}`, { newOriginalName });
 export const deleteUserFile = (serverFilename) => api.delete(`/files/${serverFilename}`);
 
-
 // --- DOCUMENT ANALYSIS ---
 export const analyzeDocument = (analysisData) => api.post('/analysis/document', analysisData);
+
+// --- ✅ UPDATED PODCAST FUNCTIONS ---
+// This function correctly calls the Node.js server to START the generation process.
+export const generatePodcast = (serverFilename, documentName) => api.post('/podcast/generate', { serverFilename, documentName });
+
+// This function correctly calls the Node.js server to POLL for the status.
+// The response from this will contain the direct URL to the Python server's audio file.
+export const getPodcastStatus = (taskId) => api.get(`/podcast/status/${taskId}`);
+
+// ❌ REMOVED: The getPodcastDownloadUrl function is no longer needed.
+// The frontend no longer constructs the URL. It receives the full URL from the getPodcastStatus response.
+// export const getPodcastDownloadUrl = (filename) => `${API_BASE_URL}/podcast/download/${filename}`;
 
 
 // --- DEFAULT EXPORT ---

@@ -2,31 +2,99 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
-import { v4 as uuidv4 } from 'uuid';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { jsPDF } from 'jspdf';
-                 
-// --- Services & Configuration ---
-import { sendMessage, saveChatHistory, getUserFiles } from '../services/api';
-import { LLM_OPTIONS } from '../config/constants';
-import { useTheme } from '../context/ThemeContext';
+import mermaid from 'mermaid';
 
-// --- Child Components ---
+import { sendMessage, saveChatHistory, getPodcastStatus } from '../services/api';
+import { useChat } from '../context/ChatContext';
+import { useTheme } from '../context/ThemeContext';
+import { LLM_OPTIONS } from '../config/constants';
+
 import SystemPromptWidget, { getPromptTextById } from './SystemPromptWidget';
 import HistoryModal from './HistoryModal';
 import FileUploadWidget from './FileUploadWidget';
 import FileManagerWidget from './FileManagerWidget';
-import AnalysisResultModal from './AnalysisResultModal';
 import VoiceInputButton from './VoiceInputButton';
 
-// --- Icons ---
-import { FiMessageSquare, FiDatabase, FiSettings, FiLogOut, FiSun, FiMoon, FiSend, FiPlus, FiArchive, FiShield } from 'react-icons/fi';
-
-// --- Styles ---
+import { FiMessageSquare, FiDatabase, FiSettings, FiLogOut, FiSun, FiMoon, FiSend, FiPlus, FiArchive, FiShield, FiDownload, FiRefreshCw, FiX } from 'react-icons/fi';
 import './ChatPage.css';
 
-// --- UI Sub-Components (for organization) ---
+// --- Task Status Component ---
+const TaskStatusMessage = ({ message }) => {
+    const { setMessages } = useChat();
+    const [taskStatus, setTaskStatus] = useState(message.task.status);
+    const [taskResult, setTaskResult] = useState(null);
+    const intervalRef = useRef(null);
+
+    useEffect(() => {
+        const poll = async () => {
+            try {
+                const { data } = await getPodcastStatus(message.task.id);
+                if (data.status === 'complete' || data.status === 'failed') {
+                    setTaskStatus(data.status);
+                    setTaskResult(data);
+                    clearInterval(intervalRef.current);
+                } else {
+                    setTaskStatus(data.status);
+                }
+            } catch (error) {
+                console.error("Polling failed:", error);
+                setTaskStatus('failed');
+                setTaskResult({ error: 'Polling failed.' });
+                clearInterval(intervalRef.current);
+            }
+        };
+
+        if (taskStatus === 'processing') {
+            intervalRef.current = setInterval(poll, 5000);
+        }
+
+        return () => {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+            }
+        };
+    }, [taskStatus, message.task.id]);
+
+    useEffect(() => {
+        if (taskStatus === 'complete' || taskStatus === 'failed') {
+            setMessages(prev => prev.map(m => 
+                m.key === message.key 
+                ? { ...m, task: { ...m.task, status: taskStatus, result: taskResult } } 
+                : m
+            ));
+        }
+    }, [taskStatus, taskResult, message.key, setMessages]);
+
+    return (
+        <div className="message-text">
+            {taskStatus === 'processing' && (
+                <div className="task-status-indicator">
+                    <FiRefreshCw className="spin" />
+                    <span>Generating podcast for *{message.task.originalName}*...</span>
+                </div>
+            )}
+            {taskStatus === 'failed' && (
+                <div className="task-status-indicator error">
+                    <FiX />
+                    <span>Podcast generation failed: {taskResult?.error || 'Unknown error'}</span>
+                </div>
+            )}
+            {taskStatus === 'complete' && taskResult?.audioUrl && (
+                <div>
+                    <p>🎙️ Podcast for *{message.task.originalName}* is ready!</p>
+                    <audio controls src={taskResult.audioUrl} style={{ width: '100%', marginTop: '10px' }}>
+                        Your browser does not support the audio element.
+                    </audio>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// --- UI Sub-Components (Unchanged) ---
 const ActivityBar = ({ activeView, setActiveView }) => (
     <div className="activity-bar">
         <button className={`activity-button ${activeView === 'ASSISTANT' ? 'active' : ''}`} onClick={() => setActiveView('ASSISTANT')} title="Assistant Settings">
@@ -37,7 +105,6 @@ const ActivityBar = ({ activeView, setActiveView }) => (
         </button>
     </div>
 );
-
 const AssistantSettingsPanel = (props) => (
     <div className="sidebar-panel">
         <h3 className="sidebar-header">Assistant Settings</h3>
@@ -73,22 +140,19 @@ const AssistantSettingsPanel = (props) => (
         </div>
     </div>
 );
-
 const DataSourcePanel = (props) => (
     <div className="sidebar-panel">
         <h3 className="sidebar-header">Data Sources</h3>
         <FileUploadWidget onUploadSuccess={props.triggerFileRefresh} />
-        <FileManagerWidget refreshTrigger={props.refreshTrigger} onAnalysisComplete={props.onAnalysisComplete} />
+        <FileManagerWidget refreshTrigger={props.refreshTrigger} />
     </div>
 );
-
 const Sidebar = ({ activeView, ...props }) => (
     <div className="sidebar-area">
         {activeView === 'ASSISTANT' && <AssistantSettingsPanel {...props} />}
         {activeView === 'DATA' && <DataSourcePanel {...props} />}
     </div>
 );
-
 const ThemeToggleButton = () => {
     const { theme, toggleTheme } = useTheme();
     return (
@@ -98,19 +162,17 @@ const ThemeToggleButton = () => {
     );
 };
 
-
 // ===================================================================================
 //  Main ChatPage Component
 // ===================================================================================
-
 const ChatPage = ({ setIsAuthenticated }) => {
-    // --- State Management ---
+    const { messages, sessionId, addMessage, resetChat, loadSession } = useChat();
+
+    // --- Local UI State ---
     const [activeView, setActiveView] = useState('ASSISTANT');
-    const [messages, setMessages] = useState([]);
     const [inputText, setInputText] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
-    const [sessionId, setSessionId] = useState('');
     const [username, setUsername] = useState('');
     const [userRole, setUserRole] = useState(null);
     const [currentSystemPromptId, setCurrentSystemPromptId] = useState('friendly');
@@ -122,82 +184,45 @@ const ChatPage = ({ setIsAuthenticated }) => {
     const [llmProvider, setLlmProvider] = useState('gemini');
     const [llmModelName, setLlmModelName] = useState(LLM_OPTIONS['gemini']?.models[0] || '');
     const [enableMultiQuery, setEnableMultiQuery] = useState(true);
-    const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
-    const [analysisModalData, setAnalysisModalData] = useState(null);
-    const [activeTab, setActiveTab] = useState('pending'); // 'pending' or 'accepted'
 
     // --- Refs & Hooks ---
     const messagesEndRef = useRef(null);
     const navigate = useNavigate();
     const { transcript, listening, resetTranscript, browserSupportsSpeechRecognition } = useSpeechRecognition();
 
-    React.useEffect(() => {
-        if (listening) {
-            setInputText(transcript);
-        }
+    useEffect(() => {
+        if (listening) { setInputText(transcript); }
     }, [transcript, listening]);
 
-    // --- Fetch user info on mount to set userRole and username ---
     useEffect(() => {
-        const fetchUserInfo = async () => {
-            try {
-                // Check if sessionId exists in localStorage as a sign of logged-in user
-                const sessionId = localStorage.getItem('sessionId');
-                if (!sessionId) {
-                    setUserRole(null);
-                    setUsername('');
-                    setIsAuthenticated(false);
-                    navigate('/login', { replace: true });
-                    return;
-                }
-                // Try to get user info from localStorage 'user' key if available
-                const userRole = localStorage.getItem('userRole');
-                const username = localStorage.getItem('username');
-                setUserRole(userRole || null);
-                setUsername(username || '');
-            } catch (error) {
-                console.error('Error fetching user info', error);
-                setUserRole(null);
-                setUsername('');
-                setIsAuthenticated(false);
-                navigate('/login', { replace: true });
-            }
-        };
-        fetchUserInfo();
-    }, [setIsAuthenticated, navigate]);
+        const user = localStorage.getItem('username');
+        const role = localStorage.getItem('userRole');
+        setUsername(user || 'User');
+        setUserRole(role);
+    }, []);
 
-    // ==================================================================
-    //  START OF FUNCTION RE-ORDERING FIX
-    // ==================================================================
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        try { mermaid.run(); } catch(e) { console.warn("Mermaid run failed:", e); }
+    }, [messages]);
 
     // --- Callbacks & Handlers ---
-    const performLogoutCleanup = useCallback(() => {
-        localStorage.clear();
-        setIsAuthenticated(false);
-        navigate('/login', { replace: true });
-    }, [setIsAuthenticated, navigate]);
-
-    // *MOVED UP*: This function must be defined before saveAndReset can use it.
     const handlePromptSelectChange = useCallback((newId) => {
         setCurrentSystemPromptId(newId);
         setEditableSystemPromptText(getPromptTextById(newId));
     }, []);
 
-    // *STAYS HERE*: This function depends on handlePromptSelectChange.
     const saveAndReset = useCallback(async (isLoggingOut = false, onCompleteCallback = null) => {
         const messagesToSave = messages.filter(m => m.role && m.parts);
-        if (!localStorage.getItem('sessionId') || messagesToSave.length === 0 || isLoading) {
+        if (!sessionId || messagesToSave.length === 0 || isLoading) {
             if (onCompleteCallback) onCompleteCallback();
             return;
         }
         setIsLoading(true);
         setError('');
         try {
-            const response = await saveChatHistory({ sessionId: localStorage.getItem('sessionId'), messages: messagesToSave });
-            const newSessionId = response.data.newSessionId || uuidv4();
-            localStorage.setItem('sessionId', newSessionId);
-            setSessionId(newSessionId);
-            setMessages([]);
+            await saveChatHistory({ sessionId, messages: messagesToSave });
+            resetChat();
             if (!isLoggingOut) handlePromptSelectChange('friendly');
         } catch (err) {
             setError(`Session Error: ${err.response?.data?.message || 'Failed to save session.'}`);
@@ -205,9 +230,14 @@ const ChatPage = ({ setIsAuthenticated }) => {
             setIsLoading(false);
             if (onCompleteCallback) onCompleteCallback();
         }
-    }, [messages, isLoading, handlePromptSelectChange]);
+    }, [messages, sessionId, isLoading, resetChat, handlePromptSelectChange]);
 
-    // *STAYS HERE*: These functions depend on saveAndReset.
+    const performLogoutCleanup = useCallback(() => {
+        localStorage.clear();
+        setIsAuthenticated(false);
+        navigate('/login', { replace: true });
+    }, [setIsAuthenticated, navigate]);
+
     const handleLogout = useCallback(() => saveAndReset(true, performLogoutCleanup), [saveAndReset, performLogoutCleanup]);
 
     const handleSendMessage = useCallback(async (e) => {
@@ -217,29 +247,33 @@ const ChatPage = ({ setIsAuthenticated }) => {
         SpeechRecognition.stopListening();
         setIsLoading(true);
         setError('');
-        const newUserMessage = { role: 'user', parts: [{ text: textToSend }], timestamp: new Date().toISOString() };
-        setMessages(prev => [...prev, newUserMessage]);
+        
+        const newUserMessage = { role: 'user', parts: [{ text: textToSend }] };
+        addMessage(newUserMessage);
+        
         setInputText('');
         resetTranscript();
+        
+        const currentHistory = [...messages, newUserMessage];
         const messageData = {
             message: textToSend,
-            history: [...messages, newUserMessage].map(m => ({ role: m.role, parts: m.parts })),
-            sessionId: localStorage.getItem('sessionId'),
+            history: currentHistory.map(m => ({ role: m.role, parts: m.parts })),
+            sessionId,
             systemPrompt: editableSystemPromptText,
             isRagEnabled, llmProvider, llmModelName: llmModelName || null, enableMultiQuery,
         };
         try {
             const response = await sendMessage(messageData);
             if (!response.data?.reply?.parts?.[0]) { throw new Error("Received an invalid response from the AI."); }
-            setMessages(prev => [...prev, response.data.reply]);
+            addMessage(response.data.reply);
         } catch (err) {
             const errorMessage = err.response?.data?.message || 'Failed to get response.';
             setError(`Chat Error: ${errorMessage}`);
-            setMessages(prev => [...prev, { role: 'model', parts: [{ text: `Error: ${errorMessage}` }], isError: true, timestamp: new Date().toISOString() }]);
+            addMessage({ role: 'model', parts: [{ text: `Error: ${errorMessage}` }], isError: true });
         } finally {
             setIsLoading(false);
         }
-    }, [inputText, isLoading, messages, editableSystemPromptText, isRagEnabled, llmProvider, llmModelName, enableMultiQuery, resetTranscript]);
+    }, [inputText, isLoading, messages, sessionId, addMessage, editableSystemPromptText, isRagEnabled, llmProvider, llmModelName, enableMultiQuery, resetTranscript]);
 
     const handleNewChat = useCallback(() => { if (!isLoading) { resetTranscript(); saveAndReset(false); } }, [isLoading, saveAndReset, resetTranscript]);
     const handleEnterKey = useCallback((e) => { if (e.key === 'Enter' && !e.shiftKey && !isLoading) { e.preventDefault(); handleSendMessage(e); } }, [handleSendMessage, isLoading]);
@@ -251,59 +285,32 @@ const ChatPage = ({ setIsAuthenticated }) => {
     const handleMultiQueryToggle = (e) => setEnableMultiQuery(e.target.checked);
     const handleHistory = useCallback(() => setIsHistoryModalOpen(true), []);
     const closeHistoryModal = useCallback(() => setIsHistoryModalOpen(false), []);
-   
-    // FIX: Define the handler for selecting a session from the history modal
     const handleSessionSelectForContinuation = useCallback((sessionData) => {
-        if (sessionData && sessionData.sessionId && sessionData.messages) {
-            localStorage.setItem('sessionId', sessionData.sessionId);
-            setSessionId(sessionData.sessionId);
-            setMessages(sessionData.messages);
-            setError('');
-            closeHistoryModal();
-        }
-    }, [closeHistoryModal]);
-
-    const onAnalysisComplete = useCallback((data) => { setAnalysisModalData(data); setIsAnalysisModalOpen(true); }, []);
-    const closeAnalysisModal = useCallback(() => { setAnalysisModalData(null); setIsAnalysisModalOpen(false); }, []);
+        loadSession(sessionData);
+        setError('');
+        closeHistoryModal();
+    }, [loadSession, closeHistoryModal]);
     const handleToggleListen = () => { if (listening) { SpeechRecognition.stopListening(); } else { resetTranscript(); SpeechRecognition.startListening({ continuous: true }); } };
-
-    // --- New handler for chat download ---
     const handleDownloadChat = useCallback(() => {
         if (messages.length === 0) return;
         const doc = new jsPDF();
         let y = 10;
         doc.setFontSize(12);
-        messages.forEach((msg, index) => {
+        messages.forEach((msg) => {
             const sender = msg.role === 'user' ? username || 'User' : 'Assistant';
             const text = msg.parts.map(part => part.text).join(' ');
             const lines = doc.splitTextToSize(`${sender}: ${text}`, 180);
-            if (y + lines.length * 10 > 280) {
-                doc.addPage();
-                y = 10;
-            }
+            if (y + lines.length * 10 > 280) { doc.addPage(); y = 10; }
             doc.text(lines, 10, y);
             y += lines.length * 10;
         });
         doc.save('chat_history.pdf');
     }, [messages, username]);
 
-    // FIX: Define the props object to pass to the Sidebar component
     const sidebarProps = {
-        currentSystemPromptId,
-        editableSystemPromptText,
-        handlePromptSelectChange,
-        handlePromptTextChange,
-        llmProvider,
-        handleLlmProviderChange,
-        isProcessing: isLoading,
-        llmModelName,
-        handleLlmModelChange,
-        enableMultiQuery,
-        handleMultiQueryToggle,
-        isRagEnabled,
-        triggerFileRefresh,
-        refreshTrigger: fileRefreshTrigger,
-        onAnalysisComplete,
+        currentSystemPromptId, editableSystemPromptText, handlePromptSelectChange, handlePromptTextChange,
+        llmProvider, handleLlmProviderChange, isProcessing: isLoading, llmModelName, handleLlmModelChange,
+        enableMultiQuery, handleMultiQueryToggle, isRagEnabled, triggerFileRefresh, refreshTrigger: fileRefreshTrigger,
     };
 
     // --- Render ---
@@ -326,7 +333,7 @@ const ChatPage = ({ setIsAuthenticated }) => {
                             </button>
                         )}
                         <button onClick={handleLogout} className="header-button" title="Logout" disabled={isLoading}><FiLogOut size={20} /></button>
-                        <button onClick={handleDownloadChat} className="header-button" title="Download Chat" disabled={messages.length === 0}>Download Chat</button>
+                        <button onClick={handleDownloadChat} className="header-button" title="Download Chat" disabled={messages.length === 0}><FiDownload size={20} /></button>
                     </div>
                 </header>
                 <main className="messages-area">
@@ -337,11 +344,15 @@ const ChatPage = ({ setIsAuthenticated }) => {
                             <p>Ask a question, upload a document, or select a model to begin.</p>
                          </div>
                     )}
-                    {messages.map((msg, index) => (
-                        <div key={`${sessionId}-${index}`} className={`message ${msg.role.toLowerCase()}${msg.isError ? '-error-message' : ''}`}>
+                    {messages.map((msg) => (
+                        <div key={msg.key} className={`message ${msg.role.toLowerCase()}${msg.isError ? '-error-message' : ''}`}>
                             <div className="message-content-wrapper">
                                 <p className="message-sender-name">{msg.role === 'user' ? username : 'Assistant'}</p>
-                                <div className="message-text"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.parts[0].text}</ReactMarkdown></div>
+                                {msg.task && msg.task.type === 'podcast' ? (
+                                    <TaskStatusMessage message={msg} />
+                                ) : (
+                                    <div className="message-text"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.parts[0].text}</ReactMarkdown></div>
+                                )}
                                 {msg.thinking && <details className="message-thinking-trace"><summary>Thinking Process</summary><pre>{msg.thinking}</pre></details>}
                                 {msg.references?.length > 0 && <div className="message-references"><strong>References:</strong><ul>{msg.references.map((ref, i) => <li key={i} title={ref.preview_snippet}>{ref.documentName} (Score: {ref.score?.toFixed(2)})</li>)}</ul></div>}
                             </div>
@@ -366,7 +377,6 @@ const ChatPage = ({ setIsAuthenticated }) => {
                 </footer>
             </div>
             <HistoryModal isOpen={isHistoryModalOpen} onClose={closeHistoryModal} onSessionSelect={handleSessionSelectForContinuation} />
-            {analysisModalData && <AnalysisResultModal isOpen={isAnalysisModalOpen} onClose={closeAnalysisModal} analysisData={analysisModalData} />}
         </div>
     );
 };
