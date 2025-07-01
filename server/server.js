@@ -225,7 +225,6 @@ const startServer = async () => {
 
         // Mount API routes
         app.get('/', (req, res) => res.send('Chatbot Backend API is running...'));
-        // --- ISOLATION STEP 1: Comment out all routes to find the source of the error ---
         app.use('/api/network', require('./routes/network'));
         app.use('/api/auth', require('./routes/auth'));
         app.use('/api/chat', require('./routes/chat'));
@@ -234,8 +233,14 @@ const startServer = async () => {
         app.use('/api/podcast', require('./routes/podcast'));
         app.use('/api/mindmap', require('./routes/mindmap'));
 
+        // Serve static files from React build
+        app.use(express.static(path.join(__dirname, 'public')));
 
-
+        // Catch-all: send index.html for React Router (after API routes, before error handler)
+        app.get('*', (req, res) => {
+          res.sendFile(path.join(__dirname, 'public', 'index.html'));
+        });
+        
         // Centralized error handler - MUST be after routes
         app.use((err, req, res, next) => {
             console.error("Error in request:", err);
