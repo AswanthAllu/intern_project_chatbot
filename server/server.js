@@ -135,6 +135,12 @@ const ensureDirectories = async () => {
 // Reprocess all existing files for RAG
 const reprocessFilesForRAG = async () => {
     try {
+        // Check if RAG reprocessing is enabled via environment variable
+        if (process.env.SKIP_RAG_REPROCESSING === 'true') {
+            console.log("--- RAG File Reprocessing Skipped (SKIP_RAG_REPROCESSING=true) ---");
+            return;
+        }
+
         console.log("--- Starting RAG File Reprocessing ---");
         
         // Get all files from database
@@ -148,6 +154,7 @@ const reprocessFilesForRAG = async () => {
         
         let processedCount = 0;
         let errorCount = 0;
+        let skippedCount = 0;
         
         // Get documentProcessor from the service manager
         const { documentProcessor } = serviceManager.getServices();
@@ -157,36 +164,84 @@ const reprocessFilesForRAG = async () => {
             return;
         }
 
-        for (const file of allFiles) {
-            try {
-                // Check if file exists on disk
-                if (!fs.existsSync(file.path)) {
-                    console.log(`❌ File not found on disk: ${file.originalname} (${file.path})`);
+        // Process files in smaller batches to manage memory
+        const batchSize = 3; // Process only 3 files at a time
+        const delayBetweenBatches = 2000; // 2 seconds between batches
+
+        for (let i = 0; i < allFiles.length; i += batchSize) {
+            const batch = allFiles.slice(i, i + batchSize);
+            console.log(`\n🔄 Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(allFiles.length / batchSize)}`);
+            
+            for (const file of batch) {
+                try {
+                    // Check if file exists on disk
+                    if (!fs.existsSync(file.path)) {
+                        console.log(`❌ File not found on disk: ${file.originalname} (${file.path})`);
+                        errorCount++;
+                        continue;
+                    }
+                    
+                    // Check file size - skip very large files to prevent memory issues
+                    const stats = fs.statSync(file.path);
+                    const fileSizeMB = stats.size / (1024 * 1024);
+                    
+                    if (fileSizeMB > 50) { // Skip files larger than 50MB
+                        console.log(`⚠️ Skipping large file (${fileSizeMB.toFixed(1)}MB): ${file.originalname}`);
+                        skippedCount++;
+                        continue;
+                    }
+                    
+                    console.log(`📄 Reprocessing: ${file.originalname} (User: ${file.user}) - ${fileSizeMB.toFixed(1)}MB`);
+                    
+                    // Process the file and add to vector store
+                    const processingResult = await documentProcessor.processFile(file.path, {
+                        userId: file.user,
+                        originalName: file.originalname,
+                        fileType: path.extname(file.path).substring(1)
+                    });
+                    
+                    console.log(`✅ Reprocessed: ${file.originalname} - ${processingResult.chunksAdded} chunks added`);
+                    processedCount++;
+                    
+                    // Small delay between individual files
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                } catch (error) {
+                    console.error(`❌ Error reprocessing ${file.originalname}:`, error.message);
+                    
+                    // If it's a memory error, try to clear the pipeline and continue
+                    if (error.message.includes('memory') || error.message.includes('allocation')) {
+                        console.log('🔄 Memory error detected, attempting to clear pipeline...');
+                        try {
+                            const { vectorStore } = serviceManager.getServices();
+                            if (vectorStore && typeof vectorStore.clearPipeline === 'function') {
+                                vectorStore.clearPipeline();
+                            }
+                        } catch (clearError) {
+                            console.error('❌ Failed to clear pipeline:', clearError.message);
+                        }
+                    }
+                    
                     errorCount++;
-                    continue;
                 }
+            }
+            
+            // Delay between batches to allow memory cleanup
+            if (i + batchSize < allFiles.length) {
+                console.log(`⏳ Waiting ${delayBetweenBatches/1000}s before next batch...`);
+                await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
                 
-                console.log(`🔄 Reprocessing: ${file.originalname} (User: ${file.user})`);
-                
-                // Process the file and add to vector store
-                const processingResult = await documentProcessor.processFile(file.path, {
-                    userId: file.user,
-                    originalName: file.originalname,
-                    fileType: path.extname(file.path).substring(1)
-                });
-                
-                console.log(`✅ Reprocessed: ${file.originalname} - ${processingResult.chunksAdded} chunks added`);
-                processedCount++;
-                
-    } catch (error) {
-                console.error(`❌ Error reprocessing ${file.originalname}:`, error.message);
-                errorCount++;
+                // Force garbage collection if available
+                if (global.gc) {
+                    global.gc();
+                }
             }
         }
         
-        console.log(`📈 RAG Reprocessing Summary:`);
+        console.log(`\n📈 RAG Reprocessing Summary:`);
         console.log(`  • Files reprocessed successfully: ${processedCount}`);
         console.log(`  • Files with errors: ${errorCount}`);
+        console.log(`  • Files skipped (too large): ${skippedCount}`);
         console.log(`  • Total files: ${allFiles.length}`);
         
         if (processedCount > 0) {
@@ -194,10 +249,15 @@ const reprocessFilesForRAG = async () => {
             console.log('💡 RAG system is now ready to answer questions from your documents.');
         }
         
+        if (errorCount > 0) {
+            console.log(`⚠️ ${errorCount} files failed to process. You can retry later or check the logs.`);
+        }
+        
         console.log("--- Finished RAG File Reprocessing ---\n");
         
     } catch (error) {
         console.error("❌ Error during RAG file reprocessing:", error);
+        console.log("💡 You can set SKIP_RAG_REPROCESSING=true in your .env file to skip this step.");
         // Don't fail server startup if RAG reprocessing fails
     }
 };

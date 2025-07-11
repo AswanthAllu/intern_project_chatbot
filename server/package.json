@@ -5,9 +5,17 @@
   "scripts": {
     "test": "jest",
     "start": "node server.js",
+    "start:gc": "node --expose-gc server.js",
+    "start:no-rag": "SKIP_RAG_REPROCESSING=true node server.js",
+    "start:gc-no-rag": "SKIP_RAG_REPROCESSING=true node --expose-gc server.js",
     "dev": "nodemon server.js",
+    "dev:gc": "nodemon --exec 'node --expose-gc' server.js",
+    "dev:no-rag": "SKIP_RAG_REPROCESSING=true nodemon server.js",
     "test:rag": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js server/test_rag_endpoints.test.js",
-    "test:all": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js"
+    "test:all": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "rag:process": "node scripts/process_existing_files.js",
+    "rag:process:gc": "node --expose-gc scripts/process_existing_files.js",
+    "rag:diagnose": "node scripts/rag_memory_helper.js"
   },
   "keywords": [],
   "author": "",
