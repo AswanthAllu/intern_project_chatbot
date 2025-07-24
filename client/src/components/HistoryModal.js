@@ -1,19 +1,32 @@
+<<<<<<< HEAD
 // client/src/components/HistoryModal.js
 
+=======
+>>>>>>> upstream/main
 import React, { useState, useEffect } from 'react';
 import { getChatSessions, getSessionDetails } from '../services/api';
 import {
     Dialog, DialogTitle, DialogContent, List, ListItem, ListItemText,
+<<<<<<< HEAD
     CircularProgress, Typography, Box, IconButton
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { formatDistanceToNow } from 'date-fns';
+=======
+    CircularProgress, Typography, Box, IconButton, ListItemSecondaryAction
+} from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import DeleteIcon from '@mui/icons-material/Delete';
+import { formatDistanceToNow } from 'date-fns';
+import { deleteChatSession } from '../services/api';
+>>>>>>> upstream/main
 
 const HistoryModal = ({ isOpen, onClose, onLoadSession }) => {
     const [sessions, setSessions] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
+<<<<<<< HEAD
     useEffect(() => {
         if (isOpen) {
             const fetchSessions = async () => {
@@ -29,6 +42,24 @@ const HistoryModal = ({ isOpen, onClose, onLoadSession }) => {
                     setIsLoading(false);
                 }
             };
+=======
+    const fetchSessions = async () => {
+        setIsLoading(true);
+        setError('');
+        try {
+            const response = await getChatSessions();
+            setSessions(response.data);
+        } catch (err) {
+            setError('Failed to load chat history.');
+            console.error(err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (isOpen) {
+>>>>>>> upstream/main
             fetchSessions();
         }
     }, [isOpen]);
@@ -44,6 +75,22 @@ const HistoryModal = ({ isOpen, onClose, onLoadSession }) => {
         }
     };
 
+<<<<<<< HEAD
+=======
+    const handleDeleteSession = async (sessionIdToDelete, sessionTitle) => {
+        if (!window.confirm(`Are you sure you want to delete the chat titled "${sessionTitle}"?`)) {
+            return;
+        }
+        try {
+            await deleteChatSession(sessionIdToDelete);
+            setSessions(prevSessions => prevSessions.filter(session => session.sessionId !== sessionIdToDelete));
+        } catch (err) {
+            setError(`Failed to delete session.`);
+            console.error(err);
+        }
+    };
+
+>>>>>>> upstream/main
     return (
         <Dialog open={isOpen} onClose={onClose} fullWidth maxWidth="sm">
             <DialogTitle sx={{ m: 0, p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -67,11 +114,36 @@ const HistoryModal = ({ isOpen, onClose, onLoadSession }) => {
                     <List>
                         {sessions.length > 0 ? (
                             sessions.map((session) => (
+<<<<<<< HEAD
                                 <ListItem button key={session.sessionId} onClick={() => handleLoadSession(session.sessionId)}>
                                     <ListItemText
                                         primary={session.title}
                                         secondary={`Last updated: ${formatDistanceToNow(new Date(session.updatedAt), { addSuffix: true })}`}
                                     />
+=======
+                                <ListItem
+                                    key={session.sessionId}
+                                    button
+                                    onClick={() => handleLoadSession(session.sessionId)}
+                                >
+                                    <ListItemText
+                                        primary={session.title}
+                                        secondary={`Last updated: ${formatDistanceToNow(new Date(session.updatedAt || session.createdAt), { addSuffix: true })}`}
+                                    />
+                                    <ListItemSecondaryAction>
+                                        <IconButton
+                                            edge="end"
+                                            aria-label="delete"
+                                            title="Delete chat"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDeleteSession(session.sessionId, session.title);
+                                            }}
+                                        >
+                                            <DeleteIcon />
+                                        </IconButton>
+                                    </ListItemSecondaryAction>
+>>>>>>> upstream/main
                                 </ListItem>
                             ))
                         ) : (

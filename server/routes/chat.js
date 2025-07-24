@@ -9,11 +9,20 @@ const {
     saveChatHistory,
     handleStandardMessage,
     handleRagMessage,
+<<<<<<< HEAD
     handleDeepSearch
 } = require('../controllers/chatController');
 const { ChatSession, SESSION_STATES, SESSION_CONTEXTS, MESSAGE_TYPES } = require('../models/ChatSession');
 const DeepSearchService = require('../deep_search/services/deepSearchService');
 const { webSearch } = require('../services/webSearchService');
+=======
+    handleDeepSearch,
+    deleteSession,
+    handleHybridRagMessage, // <-- Import the new controller function
+} = require('../controllers/chatController');
+const { ChatSession, SESSION_STATES, SESSION_CONTEXTS, MESSAGE_TYPES } = require('../models/ChatSession');
+const DeepSearchService = require('../deep_search/services/deepSearchService');
+>>>>>>> upstream/main
 
 
 // --- Session Management Endpoints ---
@@ -27,6 +36,12 @@ router.get('/sessions', tempAuth, getSessions);
 // Get the full details of a specific chat session
 router.get('/session/:sessionId', tempAuth, getSessionDetails);
 
+<<<<<<< HEAD
+=======
+// Delete a specific chat session
+router.delete('/session/:sessionId', tempAuth, deleteSession);
+
+>>>>>>> upstream/main
 // Save chat history
 router.post('/history', tempAuth, saveChatHistory);
 
@@ -36,6 +51,7 @@ router.post('/history', tempAuth, saveChatHistory);
 // Handles standard chat messages without RAG
 router.post('/message', tempAuth, handleStandardMessage);
 
+<<<<<<< HEAD
 // Handles chat messages that require RAG
 router.post('/rag', tempAuth, handleRagMessage);
 
@@ -66,4 +82,15 @@ router.post('/', async (req, res) => {
   return res.json({ source: 'bot', results: botResponse });
 });
 
+=======
+// Handles chat messages that require RAG (Legacy - can be removed later)
+router.post('/rag', tempAuth, handleRagMessage);
+
+// NEW EFFICIENT RAG ROUTE
+router.post('/rag-v2', tempAuth, handleHybridRagMessage);
+
+// Perform deep search with AI-powered query decomposition and synthesis
+router.post('/deep-search', tempAuth, handleDeepSearch);
+
+>>>>>>> upstream/main
 module.exports = router;

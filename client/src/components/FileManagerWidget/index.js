@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // client/src/components/FileManagerWidget.js
 
 import React, { useState } from 'react';
@@ -6,6 +7,15 @@ import { FaTrash, FaEdit, FaFileAudio, FaProjectDiagram, FaEllipsisV } from 'rea
 import './index.css';
 
 const FileManagerWidget = ({
+=======
+import React, { useState } from 'react';
+import { Popover } from 'react-tiny-popover';
+// Import a new icon for the chat option
+import { FaTrash, FaEdit, FaFileAudio, FaProjectDiagram, FaEllipsisV, FaCommentDots } from 'react-icons/fa';
+import './index.css';
+
+function FileManagerWidget({
+>>>>>>> upstream/main
     files,
     isLoading,
     error,
@@ -15,12 +25,20 @@ const FileManagerWidget = ({
     onGenerateMindMap,
     onChatWithFile,
     isProcessing
+<<<<<<< HEAD
 }) => {
     // State to track which file's menu is currently open
     const [openMenuId, setOpenMenuId] = useState(null);
 
     const handleRename = (fileId, currentName) => {
         setOpenMenuId(null); // Close the menu first
+=======
+}) {
+    const [openMenuId, setOpenMenuId] = useState(null);
+
+    const handleRename = (fileId, currentName) => {
+        setOpenMenuId(null);
+>>>>>>> upstream/main
         const newName = prompt("Enter new file name:", currentName);
         if (newName && newName !== currentName) {
             onRenameFile(fileId, newName);
@@ -28,7 +46,11 @@ const FileManagerWidget = ({
     };
 
     const handleActionClick = (action, fileId, fileName) => {
+<<<<<<< HEAD
         setOpenMenuId(null); // Close the menu after any action
+=======
+        setOpenMenuId(null);
+>>>>>>> upstream/main
         action(fileId, fileName);
     };
 
@@ -55,6 +77,14 @@ const FileManagerWidget = ({
                                 onClickOutside={() => setOpenMenuId(null)}
                                 content={
                                     <div className="popover-menu">
+<<<<<<< HEAD
+=======
+                                        {/* --- NEW BUTTON ADDED HERE --- */}
+                                        <button onClick={() => handleActionClick(onChatWithFile, file._id, file.originalname)} disabled={isProcessing} className="popover-menu-item">
+                                            <FaCommentDots /> Chat with this File
+                                        </button>
+                                        <div className="popover-divider" />
+>>>>>>> upstream/main
                                         <button onClick={() => handleActionClick(onGeneratePodcast, file._id, file.originalname)} disabled={isProcessing} className="popover-menu-item">
                                             <FaFileAudio /> Generate Podcast
                                         </button>

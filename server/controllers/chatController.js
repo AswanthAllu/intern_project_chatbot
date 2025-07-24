@@ -1,4 +1,5 @@
 // server/controllers/chatController.js
+<<<<<<< HEAD
 const express = require('express');
 const router = express.Router();
 const { tempAuth } = require('../middleware/authMiddleware');
@@ -35,11 +36,26 @@ const getSessions = async (req, res) => {
     } catch (error) {
         console.error('Error fetching sessions:', error);
         res.status(500).json({ message: 'Error fetching sessions' });
+=======
+
+const { ChatSession } = require('../models/ChatSession');
+const { v4: uuidv4 } = require('uuid');
+const HybridRagService = require('../services/HybridRagService');
+
+const getSessions = async (req, res) => {
+    try {
+        const sessions = await ChatSession.find({ user: req.user.id }).sort({ updatedAt: -1 });
+        res.json(sessions);
+    } catch (err) {
+        console.error('Error fetching sessions:', err.message);
+        res.status(500).send('Server Error');
+>>>>>>> upstream/main
     }
 };
 
 const getSessionDetails = async (req, res) => {
     try {
+<<<<<<< HEAD
         const session = await ChatSession.findOne({ 
             sessionId: req.params.sessionId, 
             user: req.user.id 
@@ -51,10 +67,37 @@ const getSessionDetails = async (req, res) => {
     } catch (error) {
         console.error('Error fetching session details:', error);
         res.status(500).json({ message: 'Server error' });
+=======
+        const session = await ChatSession.findOne({ sessionId: req.params.sessionId, user: req.user.id });
+        if (!session) {
+            return res.status(404).json({ message: 'Session not found' });
+        }
+        res.json(session);
+    } catch (err) {
+        console.error('Error fetching session details:', err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+const createSession = async (req, res) => {
+    try {
+        const newSession = new ChatSession({
+            user: req.user.id,
+            sessionId: uuidv4(),
+            title: 'New Conversation',
+            messages: [],
+        });
+        await newSession.save();
+        res.status(201).json(newSession);
+    } catch (err) {
+        console.error('Error creating session:', err.message);
+        res.status(500).send('Server Error');
+>>>>>>> upstream/main
     }
 };
 
 const saveChatHistory = async (req, res) => {
+<<<<<<< HEAD
     const { sessionId, messages, systemPrompt, title } = req.body;
     if (!sessionId || !messages) {
         return res.status(400).json({ message: 'Session ID and messages are required.' });
@@ -264,8 +307,92 @@ module.exports = {
     createSession,
     getSessions,
     getSessionDetails,
+=======
+     const { sessionId, messages, systemPrompt, title } = req.body;
+     if (!sessionId || !messages) {
+         return res.status(400).json({ message: 'Session ID and messages are required.' });
+     }
+     try {
+         const updatedSession = await ChatSession.findOneAndUpdate(
+             { sessionId: sessionId, user: req.user.id },
+             { 
+                 $set: {
+                     messages: messages,
+                     systemPrompt: systemPrompt,
+                     title: title || 'New Conversation',
+                     user: req.user.id
+                 }
+             },
+             { new: true, upsert: true, setDefaultsOnInsert: true }
+         );
+         res.status(201).json(updatedSession);
+     } catch (error) {
+         console.error('Error saving chat session:', error);
+         res.status(500).json({ message: 'Server error while saving chat history.' });
+     }
+};
+
+const handleStandardMessage = async (req, res) => {
+    res.json({ message: 'Standard message received' });
+};
+
+const handleRagMessage = async (req, res) => {
+    res.json({ message: 'Legacy RAG message received' });
+};
+
+const handleDeepSearch = async (req, res) => {
+    res.json({ message: 'Deep search received' });
+};
+
+const deleteSession = async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const userId = req.user.id;
+        const result = await ChatSession.findOneAndDelete({ 
+            sessionId: sessionId, 
+            user: userId 
+        });
+        if (!result) {
+            return res.status(404).json({ message: 'Chat session not found or you are not authorized to delete it.' });
+        }
+        res.status(200).json({ message: 'Chat session deleted successfully.' });
+    } catch (error) {
+        console.error('Error deleting session:', error);
+        res.status(500).json({ message: 'Server error while deleting session.' });
+    }
+};
+
+const handleHybridRagMessage = async (req, res) => {
+    try {
+        const { query, fileId, allowDeepSearch } = req.body;
+        const userId = req.user.id;
+
+        if (!query) {
+            return res.status(400).json({ message: 'Query is required.' });
+        }
+
+        const result = await HybridRagService.processQuery(query, userId, fileId, allowDeepSearch);
+        res.status(200).json(result);
+
+    } catch (error) {
+        console.error('Hybrid RAG Error:', error);
+        res.status(500).json({ message: 'An error occurred during the RAG process.' });
+    }
+};
+
+module.exports = {
+    getSessions,
+    getSessionDetails,
+    createSession,
+>>>>>>> upstream/main
     saveChatHistory,
     handleStandardMessage,
     handleRagMessage,
     handleDeepSearch,
+<<<<<<< HEAD
 };
+=======
+    deleteSession,
+    handleHybridRagMessage,
+};
+>>>>>>> upstream/main

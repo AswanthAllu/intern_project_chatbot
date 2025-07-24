@@ -2,7 +2,10 @@
   "name": "client",
   "version": "0.1.0",
   "private": true,
+<<<<<<< HEAD
   "proxy": "http://localhost:5005",
+=======
+>>>>>>> upstream/main
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
@@ -27,11 +30,22 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
+<<<<<<< HEAD
     "start": "set PORT=3005 && react-scripts start",
+=======
+    "start": "set PORT=3004 && react-scripts start",
+>>>>>>> upstream/main
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
+<<<<<<< HEAD
+=======
+  "options" : {
+   "proxy" : "http://localhost:5007",
+   "allowedHosts" : "all"
+  },
+>>>>>>> upstream/main
   "eslintConfig": {
     "extends": [
       "react-app",

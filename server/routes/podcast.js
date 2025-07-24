@@ -66,14 +66,22 @@ router.post('/generate', tempAuth, async (req, res) => {
         
         console.log(`[Podcast] Generating script for "${file.originalname}"...`);
 
+<<<<<<< HEAD
         // 4. Use GeminiAI service to generate the podcast script
+=======
+        // 4. Use GeminiAI service to generate the podcast script (always English)
+>>>>>>> upstream/main
         const script = await geminiAI.generatePodcastScript(documentContent);
         // Add debug log for script
         console.log(`[Podcast][Debug] Podcast script:`, script);
 
         console.log(`[Podcast] Script generated. Generating audio...`);
 
+<<<<<<< HEAD
         // 5. Use the podcastGenerator service to create the audio file
+=======
+        // 5. Use the podcastGenerator service to create the audio file (always English)
+>>>>>>> upstream/main
         const podcastUrl = await generatePodcastAudio(script, file.originalname);
         // Add debug log for podcastAudio
         console.log(`[Podcast][Debug] Podcast audio result:`, podcastUrl);

@@ -1,6 +1,7 @@
 // server/server.js
 const path = require('path');
 const dotenv = require('dotenv');
+<<<<<<< HEAD
 
 
 const langchainVectorStore = require('./services/LangchainVectorStore');
@@ -26,6 +27,27 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/chatbotGem
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // Check for required environment variables but don't exit
+=======
+const multer = require('multer');
+const express = require('express');
+const cors = require('cors');
+const fs = require('fs');
+const mongoose = require('mongoose');
+
+const langchainVectorStore = require('./services/LangchainVectorStore');
+const connectDB = require('./config/db');
+const { getLocalIPs } = require('./utils/networkUtils');
+const { performAssetCleanup } = require('./utils/assetCleanup');
+const File = require('./models/File');
+const serviceManager = require('./services/serviceManager');
+
+dotenv.config({ path: path.resolve(__dirname, '.env') });
+
+const PORT = process.env.PORT || 5007;
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/chatbotGeminiDB4';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+>>>>>>> upstream/main
 if (!GEMINI_API_KEY) {
     console.warn("⚠️  WARNING: GEMINI_API_KEY environment variable is not set.");
     console.warn("⚠️  AI-powered features will be disabled, but the server will still run.");
@@ -33,6 +55,7 @@ if (!GEMINI_API_KEY) {
 }
 
 const app = express();
+<<<<<<< HEAD
 
 
 
@@ -287,6 +310,29 @@ const startServer = async () => {
         // Mount API routes
         app.get('/', (req, res) => res.send('Chatbot Backend API is running...'));
         // --- ISOLATION STEP 1: Comment out all routes to find the source of the error ---
+=======
+app.use(cors());
+app.use(express.json());
+
+const startServer = async () => {
+    try {
+        console.log("--- Starting Server ---");
+        await connectDB(MONGO_URI);
+        console.log("✓ MongoDB connected successfully");
+
+        await serviceManager.initialize();
+        await performAssetCleanup();
+
+        app.use((req, res, next) => {
+            req.serviceManager = serviceManager;
+            next();
+        });
+
+        app.use('/podcasts', express.static(path.join(__dirname, 'public', 'podcasts')));
+
+        // Routes
+        app.get('/', (req, res) => res.send('Chatbot Backend API is running...'));
+>>>>>>> upstream/main
         app.use('/api/network', require('./routes/network'));
         app.use('/api/auth', require('./routes/auth'));
         app.use('/api/chat', require('./routes/chat'));
@@ -294,6 +340,7 @@ const startServer = async () => {
         app.use('/api/files', require('./routes/files'));
         app.use('/api/podcast', require('./routes/podcast'));
         app.use('/api/mindmap', require('./routes/mindmap'));
+<<<<<<< HEAD
         app.use('/api/websearch', websearchRouter);
 
 
@@ -318,12 +365,26 @@ const startServer = async () => {
             console.log('==================\n');
         });
         
+=======
+
+        const availableIPs = getLocalIPs();
+        app.listen(PORT, '0.0.0.0', () => {
+            console.log('\n=== Server Ready ===');
+            console.log(`🚀 Server listening on port ${PORT}`);
+            console.log('Access URLs:');
+            availableIPs.forEach(ip => {
+                console.log(`   - http://${ip}:3004 (Frontend) -> Backend: http://${ip}:${PORT}`);
+            });
+            console.log('==================\n');
+        });
+>>>>>>> upstream/main
     } catch (error) {
         console.error("!!! Failed to start server:", error.message);
         process.exit(1);
     }
 };
 
+<<<<<<< HEAD
 app.use(handleMulterError);
 
 
@@ -344,4 +405,7 @@ if (require.main === module) {
     startServer();
 }
 
+=======
+startServer();
+>>>>>>> upstream/main
 module.exports = app;

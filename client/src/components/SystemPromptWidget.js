@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // client/src/components/SystemPromptWidget.js
 
 import React from 'react';
@@ -38,6 +39,13 @@ export const getPromptTextById = (id) => {
     const prompt = availablePrompts.find(p => p.id === id);
     return prompt ? prompt.prompt : availablePrompts[0].prompt;
 };
+=======
+// src/components/SystemPromptWidget.js
+
+import React from 'react';
+import { Select, MenuItem, TextField, Typography, Box } from '@mui/material';
+import { availablePrompts } from '../utils/prompts'; // <-- UPDATED IMPORT
+>>>>>>> upstream/main
 
 const SystemPromptWidget = ({ selectedPromptId, promptText, onSelectChange, onTextChange }) => {
     const isCustom = selectedPromptId === 'custom';

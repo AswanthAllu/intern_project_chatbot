@@ -138,6 +138,10 @@ Respond with ONLY a valid JSON object in this format.`;
     /**
      * Generate a podcast script using Gemini
      * @param {string} documentContent - Full document content
+<<<<<<< HEAD
+=======
+     * @param {string} language - Language code (e.g., 'en', 'hi', 'fr')
+>>>>>>> upstream/main
      * @returns {Promise<Array>} Array of script segments
      */
     async generatePodcastScript(documentContent) {
@@ -163,6 +167,11 @@ ${summary.keyPoints.join('\n')}
 Main Topics:
 ${summary.metadata.topics.join(', ')}
 
+<<<<<<< HEAD
+=======
+ALL DIALOGUE MUST BE IN ENGLISH.
+
+>>>>>>> upstream/main
 Create a script with 8-12 segments, covering all key points from the summary, with a total duration of about 3-4 minutes. Use a friendly, informative tone suitable for a general audience. Make sure Host A and Host B alternate naturally and have distinct personalities - Host A can be more analytical, Host B more curious and engaging.
 
 Each segment should be conversational and flow naturally into the next. Include questions, reactions, and natural transitions between topics.
