@@ -17,6 +17,8 @@ import FileUploadWidget from './FileUploadWidget';
 import FileManagerWidget from './FileManagerWidget';
 import MindMap from './MindMap';
 import HistoryModal from './HistoryModal';
+import WebSearchResult from './WebSearchResult';
+import { webSearch } from '../services/webSearch';
 
 import './ChatPage.css';
 

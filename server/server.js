@@ -18,6 +18,7 @@ const connectDB = require('./config/db');
 const { performAssetCleanup } = require('./utils/assetCleanup');
 const File = require('./models/File');
 const serviceManager = require('./services/serviceManager');
+const websearchRouter = require('./routes/websearch');
 
 // Configuration
 const PORT = process.env.PORT || 5005;
@@ -293,7 +294,7 @@ const startServer = async () => {
         app.use('/api/files', require('./routes/files'));
         app.use('/api/podcast', require('./routes/podcast'));
         app.use('/api/mindmap', require('./routes/mindmap'));
-
+        app.use('/api/websearch', websearchRouter);
 
 
         // Centralized error handler - MUST be after routes
