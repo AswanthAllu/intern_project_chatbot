@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 // client/src/components/FileManagerWidget.js
 
 import React, { useState } from 'react';
@@ -8,9 +9,11 @@ import './index.css';
 
 const FileManagerWidget = ({
 =======
+=======
+// src/components/FileManagerWidget/index.js
+>>>>>>> a23a90a7b862494862611e06c52c6a72a196babd
 import React, { useState } from 'react';
 import { Popover } from 'react-tiny-popover';
-// Import a new icon for the chat option
 import { FaTrash, FaEdit, FaFileAudio, FaProjectDiagram, FaEllipsisV, FaCommentDots } from 'react-icons/fa';
 import './index.css';
 
@@ -24,6 +27,7 @@ function FileManagerWidget({
     onGeneratePodcast,
     onGenerateMindMap,
     onChatWithFile,
+<<<<<<< HEAD
     isProcessing
 <<<<<<< HEAD
 }) => {
@@ -45,6 +49,14 @@ function FileManagerWidget({
         }
     };
 
+=======
+    isProcessing,
+    onActionTaken // New prop to notify parent of an action
+}) {
+    const [openMenuId, setOpenMenuId] = useState(null);
+
+    // This function now wraps all actions to ensure the sidebar can be closed
+>>>>>>> a23a90a7b862494862611e06c52c6a72a196babd
     const handleActionClick = (action, fileId, fileName) => {
 <<<<<<< HEAD
         setOpenMenuId(null); // Close the menu after any action
@@ -52,6 +64,9 @@ function FileManagerWidget({
         setOpenMenuId(null);
 >>>>>>> upstream/main
         action(fileId, fileName);
+        if (onActionTaken) {
+            onActionTaken();
+        }
     };
 
     return (
@@ -75,11 +90,15 @@ function FileManagerWidget({
                                 align="center"
                                 padding={10}
                                 onClickOutside={() => setOpenMenuId(null)}
+                                containerStyle={{ zIndex: 1100 }}
                                 content={
                                     <div className="popover-menu">
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
                                         {/* --- NEW BUTTON ADDED HERE --- */}
+=======
+>>>>>>> a23a90a7b862494862611e06c52c6a72a196babd
                                         <button onClick={() => handleActionClick(onChatWithFile, file._id, file.originalname)} disabled={isProcessing} className="popover-menu-item">
                                             <FaCommentDots /> Chat with this File
                                         </button>
@@ -91,7 +110,7 @@ function FileManagerWidget({
                                         <button onClick={() => handleActionClick(onGenerateMindMap, file._id, file.originalname)} disabled={isProcessing} className="popover-menu-item">
                                             <FaProjectDiagram /> Generate Mind Map
                                         </button>
-                                        <button onClick={() => handleRename(file._id, file.originalname)} disabled={isProcessing} className="popover-menu-item">
+                                        <button onClick={() => handleActionClick(onRenameFile, file._id, file.originalname)} disabled={isProcessing} className="popover-menu-item">
                                             <FaEdit /> Rename
                                         </button>
                                         <div className="popover-divider" />
