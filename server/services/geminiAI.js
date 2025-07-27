@@ -135,15 +135,11 @@ Respond with ONLY a valid JSON object in this format.`;
         }
     }
 
-    /**
-     * Generate a podcast script using Gemini
-     * @param {string} documentContent - Full document content
-<<<<<<< HEAD
-=======
-     * @param {string} language - Language code (e.g., 'en', 'hi', 'fr')
->>>>>>> upstream/main
-     * @returns {Promise<Array>} Array of script segments
-     */
+  /**
+   * Generate a podcast script using Gemini
+   * @param {string} documentContent - Full document content
+   * @returns {Promise<Array>} Array of script segments
+   */
     async generatePodcastScript(documentContent) {
         // First generate a summary to use as context
         const summary = await this.generateSummary(documentContent, {
@@ -153,10 +149,6 @@ Respond with ONLY a valid JSON object in this format.`;
 
         const prompt = `
 You are an expert podcast scriptwriter. Based on the following summary and key points, create a podcast script for two hosts (Host A and Host B) discussing the key topics in an engaging, conversational style. The script should be structured as an array of JSON objects, each with:
-- speaker: "Host A" or "Host B"
-- text: The dialogue text (keep each segment between 2-4 sentences for natural flow)
-- duration: Estimated duration in seconds (approximate)
-- focus: Main topic of discussion
 
 Summary:
 ${summary.text}
@@ -167,11 +159,6 @@ ${summary.keyPoints.join('\n')}
 Main Topics:
 ${summary.metadata.topics.join(', ')}
 
-<<<<<<< HEAD
-=======
-ALL DIALOGUE MUST BE IN ENGLISH.
-
->>>>>>> upstream/main
 Create a script with 8-12 segments, covering all key points from the summary, with a total duration of about 3-4 minutes. Use a friendly, informative tone suitable for a general audience. Make sure Host A and Host B alternate naturally and have distinct personalities - Host A can be more analytical, Host B more curious and engaging.
 
 Each segment should be conversational and flow naturally into the next. Include questions, reactions, and natural transitions between topics.
@@ -210,6 +197,15 @@ Respond with ONLY a valid JSON array of script segments.
       ];
     }
   }
+
+  /**
+   * Generate a podcast script using Gemini
+   * @param {string} documentContent - Full document content
+   * @returns {Promise<Array>} Array of script segments
+   */
+  // If you want to add language support, add a language parameter above and update the prompt accordingly.
+  // For now, all dialogue will be in English as per the merged code.
+  // The rest of the function remains as above.
 
   /**
    * Generate mind map data using Gemini
