@@ -1,0 +1,86 @@
+{
+  "summary": "Based on the provided search results, \"India\" is a country.\n\nWhile the search results lack detailed descriptions, they suggest India is a significant subject covered by various reputable sources, including:\n\n*   **Wikipedia:** A comprehensive, collaboratively edited encyclopedia (source: \"India - Wikipedia\").\n*   **Britannica:** A well-regarded encyclopedia known for its scholarly articles (source: \"India | History, Maps, Population, Economy, & Facts | Britannica\").\n*   **Simple English Wikipedia:** A simplified version of Wikipedia, indicating a broad interest in the topic (source: \"India - Simple English Wikipedia, the free encyclopedia\").\n*   **World Atlas:** A source for geographical information, including maps and facts (source: \"India Maps & Facts - World Atlas\").\n*   **The World Factbook:** A resource produced by the Central Intelligence Agency (CIA) providing information on countries worldwide (source: \"India - The World Factbook\").\n\nThese sources likely contain information about India's:\n\n*   **History:** Its past events and development.\n*   **Maps:** Its geographical location and boundaries.\n*   **Population:** The number of people living there.\n*   **Economy:** Its economic system and activities.\n*   **Facts:** General information and statistics.\n\n**Limitations and Uncertainties:**\n\nThe lack of descriptions in the search results limits the specificity of the answer. Without accessing the actual content of these websites, it's impossible to provide more detailed information about India.\n\n**Conclusion:**\n\nIndia is a country with a rich history, diverse population, and significant global presence, as indicated by its coverage in major encyclopedias, geographical resources, and intelligence agency factbooks. To gain a more comprehensive understanding, consulting the linked resources is recommended.",
+  "sources": [
+    {
+      "title": "India - Wikipedia",
+      "url": ""
+    },
+    {
+      "title": "India | History, Maps, Population, Economy, &amp; Facts | Britannica",
+      "url": ""
+    },
+    {
+      "title": "India - Simple English Wikipedia, the free encyclopedia",
+      "url": ""
+    },
+    {
+      "title": "India Maps &amp; Facts - World Atlas",
+      "url": ""
+    },
+    {
+      "title": "India - The World Factbook",
+      "url": ""
+    }
+  ],
+  "aiGenerated": true,
+  "rawResults": [
+    {
+      "title": "India - Wikipedia",
+      "snippet": "No description available",
+      "url": "",
+      "raw": {
+        "title": "India - Wikipedia",
+        "snippet": "No description available",
+        "url": ""
+      },
+      "score": 5.800000000000001
+    },
+    {
+      "title": "India | History, Maps, Population, Economy, &amp; Facts | Britannica",
+      "snippet": "No description available",
+      "url": "",
+      "raw": {
+        "title": "India | History, Maps, Population, Economy, &amp; Facts | Britannica",
+        "snippet": "No description available",
+        "url": ""
+      },
+      "score": 16
+    },
+    {
+      "title": "India - Simple English Wikipedia, the free encyclopedia",
+      "snippet": "No description available",
+      "url": "",
+      "raw": {
+        "title": "India - Simple English Wikipedia, the free encyclopedia",
+        "snippet": "No description available",
+        "url": ""
+      },
+      "score": 13.4
+    },
+    {
+      "title": "India Maps &amp; Facts - World Atlas",
+      "snippet": "No description available",
+      "url": "",
+      "raw": {
+        "title": "India Maps &amp; Facts - World Atlas",
+        "snippet": "No description available",
+        "url": ""
+      },
+      "score": 9.600000000000001
+    },
+    {
+      "title": "India - The World Factbook",
+      "snippet": "No description available",
+      "url": "",
+      "raw": {
+        "title": "India - The World Factbook",
+        "snippet": "No description available",
+        "url": ""
+      },
+      "score": 7.6000000000000005
+    }
+  ],
+  "query": "india",
+  "timestamp": "2025-07-27T03:01:17.963Z",
+  "userId": "687ce8ce0be42bc58d2b2a46"
+}
