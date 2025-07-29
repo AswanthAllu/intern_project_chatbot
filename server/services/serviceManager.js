@@ -7,6 +7,7 @@ const GeminiService = require('./geminiService');
 const { GeminiAI } = require('./geminiAI');
 const DeepSearchService = require('../deep_search/services/deepSearchService');
 const DuckDuckGoService = require('../utils/duckduckgo');
+const WebSearchService = require('./webSearchService');
 
 class ServiceManager {
   constructor() {
@@ -58,7 +59,8 @@ class ServiceManager {
       documentProcessor: this.documentProcessor,
       geminiService: this.geminiService,
       geminiAI: this.geminiAI,
-      duckDuckGo: this.duckDuckGo
+      duckDuckGo: this.duckDuckGo,
+      webSearchService: this.webSearchService
     };
   }
 }

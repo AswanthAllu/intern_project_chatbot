@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     sendMessage as apiSendMessage, saveChatHistory, generatePodcast, generateMindMap,
     getUserFiles, deleteUserFile, renameUserFile, performDeepSearch,
-    queryHybridRagService, getSessionDetails
+    queryHybridRagService, getSessionDetails, performWebSearch
 } from '../services/api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -17,7 +17,8 @@ import FileManagerWidget from './FileManagerWidget';
 import HistorySidebarWidget from './HistorySidebarWidget';
 import SettingsWidget from './SettingsWidget';
 import MindMap from './MindMap';
-import { getPromptTextById, availablePrompts } from '../utils/prompts';
+import WebSearchResult from './WebSearchResult';
+import { getPromptTextById, availablePrompts } from '../utils/prompts.js';
 
 import './ChatPage.css';
 
@@ -39,7 +40,7 @@ const ChatPage = ({ setIsAuthenticated }) => {
     const [sidebarView, setSidebarView] = useState('files');
     const [profileAnchorEl, setProfileAnchorEl] = useState(null);
     const [loadingStates, setLoadingStates] = useState({
-        chat: false, files: false, podcast: false, mindMap: false, deepSearch: false, listening: false
+        chat: false, files: false, podcast: false, mindMap: false, deepSearch: false, listening: false, webSearch: false
     });
     const [messages, setMessages] = useState([]);
     const [inputText, setInputText] = useState('');
@@ -54,6 +55,7 @@ const ChatPage = ({ setIsAuthenticated }) => {
     const [isRagEnabled, setIsRagEnabled] = useState(false);
     const [allowRagDeepSearch, setAllowRagDeepSearch] = useState(true);
     const [isDeepSearchEnabled, setIsDeepSearchEnabled] = useState(false);
+    const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
     const [activeFileForRag, setActiveFileForRag] = useState(null);
     const [currentlySpeakingIndex, setCurrentlySpeakingIndex] = useState(null);
 
@@ -186,7 +188,28 @@ const ChatPage = ({ setIsAuthenticated }) => {
 
         const historyToSend = [...messages, newUserMessage];
         
-        if (isDeepSearchEnabled) {
+        if (isWebSearchEnabled) {
+            setLoadingStates(prev => ({ ...prev, webSearch: true }));
+            try {
+                const response = await performWebSearch(trimmedInput);
+                const webSearchResult = {
+                    role: 'assistant', type: 'web_search',
+                    parts: [{ text: `Web search results for: "${trimmedInput}"` }],
+                    timestamp: new Date(),
+                    webSearchData: {
+                        query: trimmedInput,
+                        results: response.data.results,
+                        count: response.data.count
+                    }
+                };
+                setMessages(prev => [...prev, webSearchResult]);
+            } catch (err) {
+                setError(`Web Search Error: ${err.response?.data?.message || 'Web search failed.'}`);
+                setMessages(prev => prev.slice(0, -1));
+            } finally {
+                setLoadingStates(prev => ({ ...prev, webSearch: false }));
+            }
+        } else if (isDeepSearchEnabled) {
             setLoadingStates(prev => ({ ...prev, deepSearch: true }));
             try {
                 const response = await performDeepSearch(trimmedInput);
@@ -238,7 +261,7 @@ const ChatPage = ({ setIsAuthenticated }) => {
             }
         }
     }, [
-        inputText, isProcessing, loadingStates.listening, messages, isDeepSearchEnabled,
+        inputText, isProcessing, loadingStates.listening, messages, isWebSearchEnabled, isDeepSearchEnabled,
         isRagEnabled, allowRagDeepSearch, sessionId, editableSystemPromptText, activeFileForRag
     ]);
     
@@ -531,6 +554,13 @@ const ChatPage = ({ setIsAuthenticated }) => {
                                              <div className="mindmap-container">
                                                  <MindMap mindMapData={msg.mindMapData} />
                                              </div>
+                                         ) : msg.type === 'web_search' && msg.webSearchData ? (
+                                             <WebSearchResult 
+                                                 results={msg.webSearchData.results}
+                                                 query={msg.webSearchData.query}
+                                                 isLoading={false}
+                                                 error={null}
+                                             />
                                          ) : msg.type === 'audio' && msg.audioUrl ? (
                                              <div className="audio-player-container">
                                                  <p>{messageText}</p>
@@ -564,9 +594,26 @@ const ChatPage = ({ setIsAuthenticated }) => {
                         <form className="modern-input-bar" onSubmit={handleSendMessage}>
                             <button
                                 type="button"
+                                className={`input-action-btn ${isWebSearchEnabled ? 'active' : ''}`}
+                                title="Web Search"
+                                onClick={() => { 
+                                    setIsWebSearchEnabled(v => !v); 
+                                    setIsDeepSearchEnabled(false); 
+                                    setIsRagEnabled(false); 
+                                }}
+                                disabled={isProcessing}
+                            >
+                                🌐
+                            </button>
+                            <button
+                                type="button"
                                 className={`input-action-btn ${isDeepSearchEnabled ? 'active' : ''}`}
                                 title="Deep Research"
-                                onClick={() => { setIsDeepSearchEnabled(v => !v); setIsRagEnabled(false); }}
+                                onClick={() => { 
+                                    setIsDeepSearchEnabled(v => !v); 
+                                    setIsRagEnabled(false); 
+                                    setIsWebSearchEnabled(false);
+                                }}
                                 disabled={isProcessing}
                             >
                                 DS
@@ -575,7 +622,11 @@ const ChatPage = ({ setIsAuthenticated }) => {
                                 type="button"
                                 className={`input-action-btn ${isRagEnabled ? 'active' : ''}`}
                                 title="Chat with your documents"
-                                onClick={() => { setIsRagEnabled(v => !v); setIsDeepSearchEnabled(false); }}
+                                onClick={() => { 
+                                    setIsRagEnabled(v => !v); 
+                                    setIsDeepSearchEnabled(false); 
+                                    setIsWebSearchEnabled(false);
+                                }}
                                 disabled={isProcessing || !files.length}
                             >
                                 RAG

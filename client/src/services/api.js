@@ -70,6 +70,10 @@ export const queryRagService = (queryData) => api.post('/chat/rag', queryData);
 export const performDeepSearch = (query, history = []) => api.post('/chat/deep-search', { query, history });
 export const queryHybridRagService = (queryData) => api.post('/chat/rag-v2', queryData);
 
+// Web Search
+export const performWebSearch = (query) => api.post('/websearch', { query });
+export const getSearchSuggestions = (query) => api.get('/websearch/suggestions', { params: { q: query } });
+
 // Files
 export const uploadFile = (formData) => api.post('/upload', formData);
 export const getUserFiles = () => api.get('/files');
