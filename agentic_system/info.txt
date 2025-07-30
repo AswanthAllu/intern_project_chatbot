@@ -1,0 +1,43 @@
+┌────────────┐
+│  Frontend  │
+│  (React)   │
+└─────┬──────┘
+      │ 1. User prompt
+      ▼
+┌────────────────────────────┐
+│   Backend (Node.js/Express)│
+│   /api/agentic-task        │
+└─────┬──────────────────────┘
+      │ 2. Calls Python MCPController
+      ▼
+┌────────────────────────────┐
+│   MCPController (Python)   │
+│   - TaskPlannerAgent       │
+│   - ResearchAgent          │
+│   - ReasoningAgent         │
+│   - ContentAgent           │
+│   - ExecutionAgent         │
+└─────┬──────────────────────┘
+      │ 3. Each agent calls backend API:
+      │   - /api/services/ai-search
+      │   - /api/services/synthesize
+      │   - /api/services/generate-podcast
+      │   - /api/services/execute
+      ▼
+┌────────────────────────────┐
+│   Node.js Service Layer    │
+│   (DuckDuckGo, GeminiAI,   │
+│    Podcast, etc.)          │
+└─────┬──────────────────────┘
+      │ 4. Results returned to agents
+      ▼
+┌────────────────────────────┐
+│   MCPController aggregates │
+│   and returns final result │
+└─────┬──────────────────────┘
+      │ 5. Backend sends result
+      ▼
+┌────────────┐
+│  Frontend  │
+│  (React)   │
+└────────────┘

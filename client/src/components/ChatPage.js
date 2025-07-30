@@ -12,6 +12,7 @@ import { FaPlus, FaMicrophone, FaEdit, FaSave, FaTimes, FaCopy, FaStop, FaPaperP
 import SystemPromptWidget, { getPromptTextById } from './SystemPromptWidget';
 import FileUploadWidget from './FileUploadWidget';
 import FileManagerWidget from './FileManagerWidget';
+import AgenticTaskWidget from './AgenticTaskWidget';
 import MindMap from './MindMap';
 import HistoryModal from './HistoryModal';
 
@@ -167,10 +168,10 @@ const ChatPage = ({ setIsAuthenticated }) => {
         setLoadingStates(prev => ({ ...prev, chat: true }));
 
         try {
-            const payload = { 
-                query: trimmedInput, 
-                history: [...messages, newUserMessage], 
-                sessionId, 
+            const payload = {
+                query: trimmedInput,
+                history: [...messages, newUserMessage],
+                sessionId,
                 systemPrompt: editableSystemPromptText,
                 deepSearch: isDeepSearchEnabled // Pass deep search flag to API
             };
@@ -204,10 +205,10 @@ const ChatPage = ({ setIsAuthenticated }) => {
         setLoadingStates(prev => ({ ...prev, chat: true }));
 
         try {
-             const payload = { 
-                query: editingMessage.text, 
-                history: [...historyBeforeEdit, updatedUserMessage], 
-                sessionId, 
+            const payload = {
+                query: editingMessage.text,
+                history: [...historyBeforeEdit, updatedUserMessage],
+                sessionId,
                 systemPrompt: editableSystemPromptText,
                 deepSearch: isDeepSearchEnabled // Pass deep search flag to API
             };
@@ -312,22 +313,23 @@ const ChatPage = ({ setIsAuthenticated }) => {
     return (
         <div className="chat-page-container">
             <div className="sidebar-area">
-                <SystemPromptWidget 
-                    selectedPromptId={currentSystemPromptId} 
-                    promptText={editableSystemPromptText} 
-                    onSelectChange={(id) => { setCurrentSystemPromptId(id); setEditableSystemPromptText(getPromptTextById(id)); }} 
-                    onTextChange={(text) => { setEditableSystemPromptText(text); setCurrentSystemPromptId('custom'); }} 
+                <SystemPromptWidget
+                    selectedPromptId={currentSystemPromptId}
+                    promptText={editableSystemPromptText}
+                    onSelectChange={(id) => { setCurrentSystemPromptId(id); setEditableSystemPromptText(getPromptTextById(id)); }}
+                    onTextChange={(text) => { setEditableSystemPromptText(text); setCurrentSystemPromptId('custom'); }}
                 />
                 <FileUploadWidget onUploadSuccess={handleUploadSuccess} />
-                <FileManagerWidget 
-                    files={files} 
-                    isLoading={loadingStates.files} 
-                    error={fileError} 
-                    onDeleteFile={handleDeleteFile} 
-                    onRenameFile={handleRenameFile} 
-                    onGenerateMindMap={handleGenerateMindMap} 
-                    isProcessing={isProcessing} 
+                <FileManagerWidget
+                    files={files}
+                    isLoading={loadingStates.files}
+                    error={fileError}
+                    onDeleteFile={handleDeleteFile}
+                    onRenameFile={handleRenameFile}
+                    onGenerateMindMap={handleGenerateMindMap}
+                    isProcessing={isProcessing}
                 />
+                <AgenticTaskWidget />
             </div>
             <div className="chat-container">
                 <header className="chat-header">
@@ -344,7 +346,7 @@ const ChatPage = ({ setIsAuthenticated }) => {
                         if (!msg?.role || !msg?.parts?.length) return null;
                         const messageText = msg.parts[0]?.text || '';
                         const timestamp = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-                        
+
                         return (
                             <div key={index} className={`message-wrapper ${msg.role}`}>
                                 <div className={`message-content ${msg.type || ''}`}>
@@ -373,9 +375,9 @@ const ChatPage = ({ setIsAuthenticated }) => {
                                                 disabled={isProcessing}
                                             >
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                                                    <path d="M11.536 14.01A8.473 8.473 0 0 0 14.026 8a8.473 8.473 0 0 0-2.49-6.01l-.708.707A7.476 7.476 0 0 1 13.025 8c0 2.071-.84 3.946-2.197 5.303l.708.707z"/>
-                                                    <path d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.483 5.483 0 0 1 11.025 8a5.483 5.483 0 0 1-1.61 3.89l.706.706z"/>
-                                                    <path d="M8.707 11.182A4.486 4.486 0 0 0 10.025 8a4.486 4.486 0 0 0-1.318-3.182L8 5.525A3.489 3.489 0 0 1 9.025 8 3.49 3.49 0 0 1 8 10.475l.707.707zM6.717 3.55A.5.5 0 0 1 7 4v8a.5.5 0 0 1-.812.39L3.825 10.5H1.5A.5.5 0 0 1 1 10V6a.5.5 0 0 1 .5-.5h2.325l2.363-1.89a.5.5 0 0 1 .529-.06z"/>
+                                                    <path d="M11.536 14.01A8.473 8.473 0 0 0 14.026 8a8.473 8.473 0 0 0-2.49-6.01l-.708.707A7.476 7.476 0 0 1 13.025 8c0 2.071-.84 3.946-2.197 5.303l.708.707z" />
+                                                    <path d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.483 5.483 0 0 1 11.025 8a5.483 5.483 0 0 1-1.61 3.89l.706.706z" />
+                                                    <path d="M8.707 11.182A4.486 4.486 0 0 0 10.025 8a4.486 4.486 0 0 0-1.318-3.182L8 5.525A3.489 3.489 0 0 1 9.025 8 3.49 3.49 0 0 1 8 10.475l.707.707zM6.717 3.55A.5.5 0 0 1 7 4v8a.5.5 0 0 1-.812.39L3.825 10.5H1.5A.5.5 0 0 1 1 10V6a.5.5 0 0 1 .5-.5h2.325l2.363-1.89a.5.5 0 0 1 .529-.06z" />
                                                 </svg>
                                             </button>
                                         )}

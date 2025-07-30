@@ -49,6 +49,7 @@ const startServer = async () => {
         // Routes
         app.get('/', (req, res) => res.send('Chatbot Backend API is running...'));
         app.use('/api/network', require('./routes/network'));
+        app.use('/api/agentic-task', require('./routes/agentic'));
         app.use('/api/auth', require('./routes/auth'));
         app.use('/api/chat', require('./routes/chat'));
         app.use('/api/upload', require('./routes/upload'));
