@@ -13,11 +13,15 @@ import SystemPromptWidget, { getPromptTextById } from './SystemPromptWidget';
 import FileUploadWidget from './FileUploadWidget';
 import FileManagerWidget from './FileManagerWidget';
 import MindMap from './MindMap';
-import HistoryModal from './HistoryModal';
+import Hist                        <button onClick={() => navigate('/training')} className="header-button training-button" disabled={isProcessing} title="LLM Training Dashboard">
+                            🧠 Training
+                        </button>
+                        <button onClick={() => navigate('/mcp-training')} className="header-button mcp-button" disabled={isProcessing} title="MCP Training with Local Llama">
+                            🦙 MCP
+                        </button>Modal from './HistoryModal';
 import ResearchMetadata from './ResearchMetadata';
 import ModelSwitcher from './ModelSwitcher';
 import ApiKeyManager from './ApiKeyManager';
-import McpPanel from './McpPanel';
 
 
 import './ChatPage.css';
@@ -85,13 +89,6 @@ const ChatPage = ({ setIsAuthenticated }) => {
         return saved !== null ? JSON.parse(saved) : false;
     });
 
-    // MCP state
-    const [isMcpEnabled, setIsMcpEnabled] = useState(() => {
-        // Persist MCP state in localStorage
-        const saved = localStorage.getItem('mcpEnabled');
-        return saved !== null ? JSON.parse(saved) : false;
-    });
-
     const messagesEndRef = useRef(null);
     const recognitionRef = useRef(null);
     const navigate = useNavigate();
@@ -123,11 +120,6 @@ const ChatPage = ({ setIsAuthenticated }) => {
     useEffect(() => {
         localStorage.setItem('multiLLMEnabled', JSON.stringify(isMultiLLMEnabled));
     }, [isMultiLLMEnabled]);
-
-    // Persist MCP state to localStorage
-    useEffect(() => {
-        localStorage.setItem('mcpEnabled', JSON.stringify(isMcpEnabled));
-    }, [isMcpEnabled]);
 
     // Ensure only one search mode is active at a time (RAG and DeepSearch only - WebSearch is automatic)
     const handleRagToggle = useCallback(() => {
@@ -331,60 +323,11 @@ const ChatPage = ({ setIsAuthenticated }) => {
         }, 3000);
     }, []);
 
-    // MCP search handler
-    const handleMcpSearch = useCallback(async (query) => {
-        if (!query.trim() || isProcessing) return;
-
-        const newUserMessage = { id: uuidv4(), role: 'user', parts: [{ text: query.trim() }], timestamp: new Date() };
-        setMessages(prev => [...prev, newUserMessage]);
-        setError('');
-        setLoadingStates(prev => ({ ...prev, chat: true }));
-
-        try {
-            console.log('🤖 MCP search enabled for query:', query);
-
-            const response = await fetch('/api/agents/search', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    input: query.trim(),
-                    history: [...messages, newUserMessage],
-                    sessionId,
-                    systemPrompt: editableSystemPromptText
-                })
-            });
-
-            const data = await response.json();
-            if (!data.success) throw new Error(data.error || 'MCP search failed');
-
-            const assistantMessage = {
-                id: uuidv4(),
-                role: 'assistant',
-                parts: [{ text: `🤖 **MCP Agents Active** - Enhanced AI search and analysis.\n\n${data.data.response}` }],
-                timestamp: new Date(),
-                metadata: data.data.metadata
-            };
-
-            setMessages(prev => [...prev, assistantMessage]);
-        } catch (err) {
-            console.error('MCP search error:', err);
-            setError(err.message || 'MCP search failed');
-            setMessages(prev => prev.slice(0, -1)); // Remove user message on error
-        } finally {
-            setLoadingStates(prev => ({ ...prev, chat: false }));
-        }
-    }, [messages, sessionId, editableSystemPromptText, isProcessing]);
-
     const handleSendMessage = useCallback(async (e, overrideInput = null) => {
         if (e) e.preventDefault();
         const trimmedInput = (overrideInput || inputText).trim();
         if (!trimmedInput || isProcessing) return;
         if (loadingStates.listening) recognitionRef.current?.stop();
-
-        // Check if MCP is enabled and handle MCP search
-        if (isMcpEnabled) {
-            return handleMcpSearch(trimmedInput);
-        }
 
         const newUserMessage = { id: uuidv4(), role: 'user', parts: [{ text: trimmedInput }], timestamp: new Date() };
         setMessages(prev => [...prev, newUserMessage]);
@@ -510,7 +453,7 @@ const ChatPage = ({ setIsAuthenticated }) => {
         } finally {
             setLoadingStates(prev => ({ ...prev, chat: false }));
         }
-    }, [inputText, isProcessing, loadingStates, messages, sessionId, editableSystemPromptText, isRagEnabled, isDeepSearchEnabled, isMcpEnabled, isMultiLLMEnabled, selectedModel, handleLogout, handleMcpSearch]);
+    }, [inputText, isProcessing, loadingStates, messages, sessionId, editableSystemPromptText, isRagEnabled, isDeepSearchEnabled, isMultiLLMEnabled, selectedModel, handleLogout]);
 
     // Message editing functionality (currently unused in UI)
     /*
@@ -813,8 +756,8 @@ const ChatPage = ({ setIsAuthenticated }) => {
                     <h1>Engineering Tutor</h1>
                     <div className="header-controls">
                         <span className="username-display">Hi, {username}!</span>
-                        <button onClick={() => navigate('/training')} className="header-button training-button" disabled={isProcessing} title="LLM Training Dashboard">
-                            🧠 Training
+                        <button onClick={() => navigate('/mcp-training')} className="header-button training-button" disabled={isProcessing} title="MCP Training with Local Llama">
+                            � Training
                         </button>
                         <button onClick={() => setShowHistoryModal(true)} className="header-button" disabled={isProcessing}>History</button>
                         <button onClick={handleNewChat} className="header-button" disabled={isProcessing}>New Chat</button>
@@ -822,11 +765,6 @@ const ChatPage = ({ setIsAuthenticated }) => {
                     </div>
                 </header>
                 <div className="messages-area">
-                    <McpPanel
-                        isMcpEnabled={isMcpEnabled}
-                        setIsMcpEnabled={setIsMcpEnabled}
-                        onMcpSearch={handleMcpSearch}
-                    />
                     {messages.map((msg, index) => {
                         if (!msg?.role || !msg?.parts?.length) return null;
                         const messageText = msg.parts[0]?.text || '';

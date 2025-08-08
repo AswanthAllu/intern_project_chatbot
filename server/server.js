@@ -47,6 +47,19 @@ const startServer = async () => {
 
         await serviceManager.initialize();
 
+        // Start Agent MCP shim (Python) in background
+        try {
+            const mcpSpawner = require('./services/agentMcpSpawner');
+            // Set a shorter timeout and continue if MCP fails
+            const mcpTimeout = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('MCP startup timeout')), 10000)
+            );
+            await Promise.race([mcpSpawner.start(), mcpTimeout]);
+            console.log('✓ MCP agent server started');
+        } catch (mcpErr) {
+            console.warn('⚠️ MCP agent server failed to start:', mcpErr.message);
+        }
+
         // Initialize user service manager
         const userServiceManager = require('./services/userServiceManager');
         await userServiceManager.initialize();
@@ -84,6 +97,7 @@ const startServer = async () => {
         app.use('/api/user-api-keys', require('./routes/userApiKeys')); // User API key management
         app.use('/api/admin', require('./routes/admin')); // Admin dashboard and user management
         app.use('/api/research', require('./routes/testResearch')); // Advanced Deep Research testing
+        app.use('/api/agents', require('./routes/agents')); // Agentic MCP bridge
 
         // Initialize monitoring routes with metrics collector
         const monitoringRoutes = require('./routes/monitoring');
@@ -111,6 +125,13 @@ const startServer = async () => {
                 try {
                     await serviceManager.cleanup();
                     console.log('🧹 Services cleaned up');
+
+                    // Stop MCP shim
+                    try {
+                        const mcpSpawner = require('./services/agentMcpSpawner');
+                        await mcpSpawner.stop();
+                        console.log('🛑 MCP agent server stopped');
+                    } catch (_) { }
 
                     // Only close MongoDB if it's connected
                     if (mongoose.connection.readyState === 1) {

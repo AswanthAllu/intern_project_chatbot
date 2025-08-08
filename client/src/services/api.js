@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const getApiBaseUrl = () => {
-    const backendPort = process.env.REACT_APP_BACKEND_PORT || 5007;
+    const backendPort = process.env.REACT_APP_BACKEND_PORT || 5005;
     const hostname = window.location.hostname;
     const protocol = window.location.protocol;
     return `${protocol}//${hostname}:${backendPort}/api`;
@@ -24,11 +24,11 @@ api.interceptors.request.use(
         if (userId) {
             config.headers['x-user-id'] = userId;
         }
-        
+
         if (config.data instanceof FormData) {
             delete config.headers['Content-Type'];
         } else if (!config.headers['Content-Type']) {
-             config.headers['Content-Type'] = 'application/json';
+            config.headers['Content-Type'] = 'application/json';
         }
         return config;
     },

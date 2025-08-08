@@ -8,7 +8,7 @@ class OllamaConnector {
         this.baseUrl = baseUrl;
         this.isAvailable = false;
         this.availableModels = [];
-        this.defaultModel = 'llama3.2:latest';
+        this.defaultModel = 'llama3.1:latest';
     }
 
     /**
@@ -17,20 +17,60 @@ class OllamaConnector {
     async initialize() {
         try {
             console.log('🦙 Initializing Ollama connector...');
-            
+
             // Check if Ollama is running
             await this.checkHealth();
-            
+
             // Get available models
             await this.getAvailableModels();
-            
+
+            // Auto-select the best available model
+            this.selectBestAvailableModel();
+
             this.isAvailable = true;
             console.log(`✅ Ollama connector initialized with ${this.availableModels.length} models`);
-            
+            console.log(`📝 Using model: ${this.defaultModel}`);
+
         } catch (error) {
             console.warn('⚠️ Ollama not available:', error.message);
             this.isAvailable = false;
         }
+    }
+
+    /**
+     * Select the best available model from the installed models
+     */
+    selectBestAvailableModel() {
+        if (!this.availableModels || this.availableModels.length === 0) {
+            console.warn('⚠️ No Ollama models available');
+            return;
+        }
+
+        // Priority list of preferred models
+        const preferredModels = [
+            'llama3.2:latest',
+            'llama3.1:latest',
+            'llama3:latest',
+            'qwen3:latest',
+            'wizardcoder:7b-python',
+            'devstral:latest'
+        ];
+
+        // Find the first available preferred model
+        for (const preferredModel of preferredModels) {
+            const foundModel = this.availableModels.find(model =>
+                model.name === preferredModel || model.name.startsWith(preferredModel.split(':')[0])
+            );
+            if (foundModel) {
+                this.defaultModel = foundModel.name;
+                console.log(`✅ Selected model: ${this.defaultModel}`);
+                return;
+            }
+        }
+
+        // If no preferred model found, use the first available
+        this.defaultModel = this.availableModels[0].name;
+        console.log(`✅ Selected first available model: ${this.defaultModel}`);
     }
 
     /**
@@ -54,12 +94,12 @@ class OllamaConnector {
         try {
             const response = await axios.get(`${this.baseUrl}/api/tags`);
             this.availableModels = response.data.models || [];
-            
+
             console.log('📋 Available Ollama models:');
             this.availableModels.forEach(model => {
                 console.log(`   - ${model.name} (${this.formatSize(model.size)})`);
             });
-            
+
             return this.availableModels;
         } catch (error) {
             console.warn('Failed to get Ollama models:', error.message);
@@ -77,7 +117,7 @@ class OllamaConnector {
 
         try {
             console.log(`🦙 Generating response with ${model}...`);
-            
+
             const requestData = {
                 model: model,
                 prompt: query,
@@ -127,7 +167,7 @@ class OllamaConnector {
         try {
             // Convert messages to a single prompt (Ollama doesn't support chat format directly)
             const prompt = this.formatMessagesAsPrompt(messages);
-            
+
             return await this.generateChatResponse(prompt, model, options);
 
         } catch (error) {
@@ -156,7 +196,7 @@ class OllamaConnector {
      * Check if a specific model is available
      */
     isModelAvailable(modelName) {
-        return this.availableModels.some(model => 
+        return this.availableModels.some(model =>
             model.name === modelName || model.name.startsWith(modelName)
         );
     }
@@ -167,7 +207,7 @@ class OllamaConnector {
     async pullModel(modelName) {
         try {
             console.log(`📥 Pulling model ${modelName} from Ollama registry...`);
-            
+
             const response = await axios.post(`${this.baseUrl}/api/pull`, {
                 name: modelName
             }, {
@@ -175,10 +215,10 @@ class OllamaConnector {
             });
 
             console.log(`✅ Model ${modelName} pulled successfully`);
-            
+
             // Refresh available models
             await this.getAvailableModels();
-            
+
             return true;
         } catch (error) {
             console.error(`Failed to pull model ${modelName}:`, error.message);
@@ -191,7 +231,7 @@ class OllamaConnector {
      */
     formatSize(bytes) {
         if (!bytes) return 'Unknown size';
-        
+
         const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
         const i = Math.floor(Math.log(bytes) / Math.log(1024));
         return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
@@ -205,7 +245,7 @@ class OllamaConnector {
             const response = await axios.post(`${this.baseUrl}/api/show`, {
                 name: modelName
             });
-            
+
             return response.data;
         } catch (error) {
             console.error(`Failed to get model info for ${modelName}:`, error.message);

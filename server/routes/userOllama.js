@@ -15,12 +15,12 @@ router.get('/status', tempAuth, async (req, res) => {
     try {
         const userId = req.user.id;
         const status = await userOllamaConnector.getUserOllamaStatus(userId);
-        
+
         res.json({
             success: true,
             data: status
         });
-        
+
     } catch (error) {
         console.error('Error getting user Ollama status:', error);
         res.status(500).json({
@@ -39,12 +39,12 @@ router.post('/test', tempAuth, async (req, res) => {
     try {
         const userId = req.user.id;
         const testResult = await userOllamaConnector.testUserConnection(userId);
-        
+
         res.json({
             success: true,
             data: testResult
         });
-        
+
     } catch (error) {
         console.error('Error testing user Ollama connection:', error);
         res.status(500).json({
@@ -63,14 +63,14 @@ router.put('/url', tempAuth, async (req, res) => {
     try {
         const userId = req.user.id;
         const { ollamaUrl } = req.body;
-        
+
         if (!ollamaUrl) {
             return res.status(400).json({
                 success: false,
                 error: 'Ollama URL is required'
             });
         }
-        
+
         // Validate URL format
         try {
             new URL(ollamaUrl);
@@ -80,14 +80,14 @@ router.put('/url', tempAuth, async (req, res) => {
                 error: 'Please provide a valid URL (e.g., http://localhost:11434 or http://your-server:11434)'
             });
         }
-        
+
         const updateResult = await userOllamaConnector.updateUserOllamaUrl(userId, ollamaUrl);
-        
+
         res.json({
             success: updateResult.success,
             data: updateResult
         });
-        
+
     } catch (error) {
         console.error('Error updating user Ollama URL:', error);
         res.status(500).json({
@@ -106,7 +106,7 @@ router.get('/models', tempAuth, async (req, res) => {
     try {
         const userId = req.user.id;
         const models = await userOllamaConnector.getUserAvailableModels(userId);
-        
+
         res.json({
             success: true,
             data: {
@@ -114,7 +114,7 @@ router.get('/models', tempAuth, async (req, res) => {
                 count: models.length
             }
         });
-        
+
     } catch (error) {
         console.error('Error getting user Ollama models:', error);
         res.status(500).json({
@@ -133,22 +133,22 @@ router.post('/chat', tempAuth, async (req, res) => {
     try {
         const userId = req.user.id;
         const { query, model } = req.body;
-        
+
         if (!query) {
             return res.status(400).json({
                 success: false,
                 error: 'Query is required'
             });
         }
-        
+
         console.log(`[User Ollama] Testing chat for user ${userId}: "${query.substring(0, 50)}..."`);
-        
+
         const response = await userOllamaConnector.generateUserResponse(userId, query, {
-            model: model || 'llama3.2:latest',
+            model: model || 'llama3.1:latest',
             max_tokens: 500,
             temperature: 0.7
         });
-        
+
         res.json({
             success: true,
             data: {
@@ -164,7 +164,7 @@ router.post('/chat', tempAuth, async (req, res) => {
                 }
             }
         });
-        
+
     } catch (error) {
         console.error('Error testing user Ollama chat:', error);
         res.status(500).json({
@@ -183,14 +183,14 @@ router.get('/config', tempAuth, async (req, res) => {
     try {
         const userId = req.user.id;
         const user = await User.findById(userId).select('username ollamaUrl');
-        
+
         if (!user) {
             return res.status(404).json({
                 success: false,
                 error: 'User not found'
             });
         }
-        
+
         res.json({
             success: true,
             data: {
@@ -199,7 +199,7 @@ router.get('/config', tempAuth, async (req, res) => {
                 defaultUrl: 'http://localhost:11434'
             }
         });
-        
+
     } catch (error) {
         console.error('Error getting user Ollama config:', error);
         res.status(500).json({
@@ -218,12 +218,12 @@ router.get('/system-status', tempAuth, async (req, res) => {
     try {
         // Note: In a real app, you'd check if user is admin
         const systemStatus = userOllamaConnector.getSystemStatus();
-        
+
         res.json({
             success: true,
             data: systemStatus
         });
-        
+
     } catch (error) {
         console.error('Error getting system Ollama status:', error);
         res.status(500).json({
@@ -241,9 +241,9 @@ router.get('/system-status', tempAuth, async (req, res) => {
 router.post('/cleanup', tempAuth, async (req, res) => {
     try {
         const { maxAgeMinutes = 30 } = req.body;
-        
+
         userOllamaConnector.cleanupOldConnectors(maxAgeMinutes);
-        
+
         res.json({
             success: true,
             data: {
@@ -251,7 +251,7 @@ router.post('/cleanup', tempAuth, async (req, res) => {
                 timestamp: new Date().toISOString()
             }
         });
-        
+
     } catch (error) {
         console.error('Error cleaning up Ollama connectors:', error);
         res.status(500).json({
