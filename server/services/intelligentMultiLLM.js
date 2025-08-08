@@ -43,12 +43,12 @@ class IntelligentMultiLLM {
 
             // Define available models with their specializations
             this.models = new Map([
-                ['llama3.2', {
-                    name: 'Llama 3.2',
+                ['llama3.1', {
+                    name: 'Llama 3.1',
                     specialties: ['general_chat', 'casual_conversation', 'creative_writing', 'storytelling'],
                     strengths: ['Natural conversation', 'Creative tasks', 'General knowledge'],
                     connector: 'ollama',
-                    model: 'llama3.2:latest',
+                    model: 'llama3.1:latest',
                     priority: 1,
                     available: false
                 }],
@@ -196,12 +196,12 @@ Return in JSON format:
         // Score models based on specialties match
         const scoredModels = availableModels.map(model => {
             let score = 0;
-            
+
             // Primary specialty match
             if (model.specialties.includes(conversationType.type)) {
                 score += 10;
             }
-            
+
             // Secondary specialty match
             if (conversationType.secondaryTypes) {
                 conversationType.secondaryTypes.forEach(type => {
@@ -210,13 +210,13 @@ Return in JSON format:
                     }
                 });
             }
-            
+
             // Confidence bonus
             score += conversationType.confidence * 3;
-            
+
             // Priority bonus (lower priority number = higher bonus)
             score += (3 - model.priority);
-            
+
             // User preference bonus
             if (userPreferences.preferredModel === model.key) {
                 score += 8;
@@ -244,15 +244,15 @@ Return in JSON format:
      */
     generateSelectionReasoning(model, conversationType) {
         const reasons = [];
-        
+
         if (model.specialties.includes(conversationType.type)) {
             reasons.push(`specialized in ${conversationType.type}`);
         }
-        
+
         if (conversationType.confidence > 0.8) {
             reasons.push(`high confidence classification (${conversationType.confidence})`);
         }
-        
+
         if (model.priority === 1) {
             reasons.push('top-tier model');
         }
@@ -305,12 +305,12 @@ Return in JSON format:
      */
     updateRoutingStats(conversationType, modelSelection) {
         this.routingStats.totalQueries++;
-        
+
         if (!this.routingStats.routingDecisions[conversationType.type]) {
             this.routingStats.routingDecisions[conversationType.type] = 0;
         }
         this.routingStats.routingDecisions[conversationType.type]++;
-        
+
         if (!this.routingStats.modelPerformance[modelSelection.model.key]) {
             this.routingStats.modelPerformance[modelSelection.model.key] = 0;
         }
