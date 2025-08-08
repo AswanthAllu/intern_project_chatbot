@@ -72,6 +72,19 @@ const ChatPage = ({ setIsAuthenticated }) => {
     const [editingMessage, setEditingMessage] = useState(null);
     const [deepSearchStatus, setDeepSearchStatus] = useState('unknown'); // 'available', 'quota_exceeded', 'unavailable', 'unknown'
 
+    // Sidebar tab state - default to 'files' to show My Files tab actively
+    const [activeTab, setActiveTab] = useState('files'); // 'settings', 'files', 'recents'
+
+    // Theme and sidebar state
+    const [isDarkTheme, setIsDarkTheme] = useState(() => {
+        const saved = localStorage.getItem('isDarkTheme');
+        return saved ? JSON.parse(saved) : false;
+    });
+    const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+        const saved = localStorage.getItem('isSidebarOpen');
+        return saved ? JSON.parse(saved) : true;
+    });
+
     // Model switching state
     const [selectedModel, setSelectedModel] = useState(() => {
         // Persist selected model in localStorage
@@ -116,6 +129,17 @@ const ChatPage = ({ setIsAuthenticated }) => {
         localStorage.setItem('multiLLMEnabled', JSON.stringify(isMultiLLMEnabled));
     }, [isMultiLLMEnabled]);
 
+    // Persist theme state to localStorage
+    useEffect(() => {
+        localStorage.setItem('isDarkTheme', JSON.stringify(isDarkTheme));
+        document.body.className = isDarkTheme ? 'dark-theme' : 'light-theme';
+    }, [isDarkTheme]);
+
+    // Persist sidebar state to localStorage
+    useEffect(() => {
+        localStorage.setItem('isSidebarOpen', JSON.stringify(isSidebarOpen));
+    }, [isSidebarOpen]);
+
     // Ensure only one search mode is active at a time (RAG and DeepSearch only - WebSearch is automatic)
     const handleRagToggle = useCallback(() => {
         if (!isRagEnabled) {
@@ -132,6 +156,18 @@ const ChatPage = ({ setIsAuthenticated }) => {
         }
         setIsDeepSearchEnabled(v => !v);
     }, [isDeepSearchEnabled, isRagEnabled]);
+
+    const toggleTheme = useCallback(() => {
+        setIsDarkTheme(prev => !prev);
+    }, []);
+
+    const toggleSidebar = useCallback(() => {
+        setIsSidebarOpen(prev => {
+            const newValue = !prev;
+            localStorage.setItem('isSidebarOpen', JSON.stringify(newValue));
+            return newValue;
+        });
+    }, []);
 
     // Function to check DeepSearch service status (currently unused - using response-based status tracking)
     // const checkDeepSearchStatus = useCallback(async () => {
@@ -414,7 +450,10 @@ const ChatPage = ({ setIsAuthenticated }) => {
                 parts: [{ text: responseText }],
                 followUpQuestions: response.data.followUpQuestions || [],
                 timestamp: new Date(),
-                metadata: metadata
+                metadata: metadata,
+                downloadUrl: response.data.downloadUrl,
+                fileName: response.data.fileName,
+                documentType: response.data.documentType
             };
 
             // Remove loading message and add real response
@@ -511,7 +550,10 @@ const ChatPage = ({ setIsAuthenticated }) => {
                 parts: [{ text: responseText }],
                 followUpQuestions: response.data.followUpQuestions || [],
                 timestamp: new Date(),
-                metadata: metadata
+                metadata: metadata,
+                downloadUrl: response.data.downloadUrl,
+                fileName: response.data.fileName,
+                documentType: response.data.documentType
             };
             setMessages(prev => [...prev, assistantMessage]);
         } catch (err) {
@@ -712,49 +754,186 @@ const ChatPage = ({ setIsAuthenticated }) => {
     if (!userId) return <div className="loading-indicator"><span>Initializing...</span></div>;
 
     return (
-        <div className="chat-page-container">
-            <div className="sidebar-area">
-                {/* Model Switcher */}
-                <ModelSwitcher
-                    selectedModel={selectedModel}
-                    onModelChange={handleModelChange}
-                    isSidebarOpen={true}
-                    userId={userId}
-                />
+        <div className={`chat-page-container ${isDarkTheme ? 'dark-theme' : 'light-theme'}`}>
+            {/* Mobile Overlay */}
+            {isSidebarOpen && (
+                <div className="sidebar-overlay" onClick={toggleSidebar}></div>
+            )}
 
-                {/* API Key Manager */}
-                <ApiKeyManager
-                    userId={userId}
-                    isSidebarOpen={true}
-                />
+            <div className={`sidebar-area ${isSidebarOpen ? 'open' : 'closed'}`}>
+                {/* Vertical Icon Navigation */}
+                <div className="sidebar-icon-nav">
+                    <button
+                        className={`sidebar-icon-item ${activeTab === 'upload' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('upload')}
+                        title="Upload Files"
+                    >
+                        <span>≡</span>
+                    </button>
+                    <button
+                        className={`sidebar-icon-item ${activeTab === 'new' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('new')}
+                        title="New Chat"
+                    >
+                        <span>+</span>
+                    </button>
+                    <button
+                        className={`sidebar-icon-item ${activeTab === 'recents' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('recents')}
+                        title="Recent Chats"
+                    >
+                        <span>↻</span>
+                    </button>
+                    <button
+                        className={`sidebar-icon-item ${activeTab === 'files' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('files')}
+                        title="My Files"
+                    >
+                        <span>📁</span>
+                    </button>
+                    <button
+                        className={`sidebar-icon-item ${activeTab === 'docs' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('docs')}
+                        title="Documents"
+                    >
+                        <span>📄</span>
+                    </button>
 
-                <SystemPromptWidget
-                    selectedPromptId={currentSystemPromptId}
-                    promptText={editableSystemPromptText}
-                    onSelectChange={(id) => { setCurrentSystemPromptId(id); setEditableSystemPromptText(getPromptTextById(id)); }}
-                    onTextChange={(text) => { setEditableSystemPromptText(text); setCurrentSystemPromptId('custom'); }}
-                />
-                <FileUploadWidget onUploadSuccess={handleUploadSuccess} />
-                <FileManagerWidget
-                    files={files}
-                    isLoading={loadingStates.files}
-                    error={fileError}
-                    onDeleteFile={handleDeleteFile}
-                    onRenameFile={handleRenameFile}
-                    onGeneratePodcast={handleGeneratePodcast}
-                    onGenerateMindMap={handleGenerateMindMap}
-                    isProcessing={isProcessing}
-                />
+                    {/* Settings at bottom */}
+                    <div className="sidebar-icon-spacer"></div>
+                    <button
+                        className={`sidebar-icon-item ${activeTab === 'settings' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('settings')}
+                        title="Settings"
+                    >
+                        <span>⚙</span>
+                    </button>
+                </div>
+
+                {/* Content Area */}
+                <div className="sidebar-content-area">
+                    {/* Upload Files Tab */}
+                    {activeTab === 'upload' && (
+                        <div className="sidebar-tab-content">
+                            <h3 className="sidebar-tab-title">Upload Files</h3>
+                            <FileUploadWidget onUploadSuccess={handleUploadSuccess} />
+                        </div>
+                    )}
+
+                    {/* New Chat Tab */}
+                    {activeTab === 'new' && (
+                        <div className="sidebar-tab-content">
+                            <h3 className="sidebar-tab-title">New Chat</h3>
+                            <button className="new-chat-btn" onClick={handleNewChat} disabled={isProcessing}>
+                                <span className="new-chat-icon">✏️</span>
+                                <span className="new-chat-text">Start New Chat</span>
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Recent Chats Tab */}
+                    {activeTab === 'recents' && (
+                        <div className="sidebar-tab-content">
+                            <h3 className="sidebar-tab-title">Recent Chats</h3>
+                            <button
+                                onClick={() => setShowHistoryModal(true)}
+                                className="gemini-button secondary"
+                                disabled={isProcessing}
+                            >
+                                View Chat History
+                            </button>
+                            <p className="section-description">
+                                Access your previous conversations and continue where you left off.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* My Files Tab - Default Active */}
+                    {activeTab === 'files' && (
+                        <div className="sidebar-tab-content">
+                            <h3 className="sidebar-tab-title">My Files</h3>
+                            <FileManagerWidget
+                                files={files}
+                                isLoading={loadingStates.files}
+                                error={fileError}
+                                onDeleteFile={handleDeleteFile}
+                                onRenameFile={handleRenameFile}
+                                onGeneratePodcast={handleGeneratePodcast}
+                                onGenerateMindMap={handleGenerateMindMap}
+                                isProcessing={isProcessing}
+                            />
+                        </div>
+                    )}
+
+                    {/* Documents Tab */}
+                    {activeTab === 'docs' && (
+                        <div className="sidebar-tab-content">
+                            <h3 className="sidebar-tab-title">Documents</h3>
+                            <p className="section-description">
+                                Your document library will appear here.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Settings Tab */}
+                    {activeTab === 'settings' && (
+                        <div className="sidebar-tab-content">
+                            <h3 className="sidebar-tab-title">Settings</h3>
+
+                            {/* System Prompts Section */}
+                            <div className="settings-section">
+                                <h4 className="settings-section-title">System Prompts</h4>
+                                <SystemPromptWidget
+                                    selectedPromptId={currentSystemPromptId}
+                                    promptText={editableSystemPromptText}
+                                    onSelectChange={(id) => { setCurrentSystemPromptId(id); setEditableSystemPromptText(getPromptTextById(id)); }}
+                                    onTextChange={(text) => { setEditableSystemPromptText(text); setCurrentSystemPromptId('custom'); }}
+                                />
+                            </div>
+
+                            {/* Model Selection Section */}
+                            <div className="settings-section">
+                                <h4 className="settings-section-title">AI Model</h4>
+                                <ModelSwitcher
+                                    selectedModel={selectedModel}
+                                    onModelChange={handleModelChange}
+                                    isSidebarOpen={true}
+                                    userId={userId}
+                                />
+                            </div>
+
+                            {/* API Keys Section */}
+                            <div className="settings-section">
+                                <h4 className="settings-section-title">API Keys & Configuration</h4>
+                                <ApiKeyManager
+                                    userId={userId}
+                                    isSidebarOpen={true}
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
             <div className="chat-container">
                 <header className="chat-header">
-                    <h1>Engineering Tutor</h1>
+                    <div className="header-left">
+                        <button className="hamburger-btn" onClick={toggleSidebar} title="Toggle sidebar">
+                            <span className="hamburger-icon">≡</span>
+                        </button>
+                        <h1>TutorAI</h1>
+                    </div>
                     <div className="header-controls">
                         <span className="username-display">Hi, {username}!</span>
+                        <button
+                            className="theme-toggle-btn"
+                            onClick={toggleTheme}
+                            title={isDarkTheme ? "Switch to light theme" : "Switch to dark theme"}
+                        >
+                            {isDarkTheme ? '☀' : '🌙'}
+                        </button>
                         <button onClick={() => navigate('/training')} className="header-button training-button" disabled={isProcessing} title="LLM Training Dashboard">
                             🧠 Training
                         </button>
-                        <button onClick={() => setShowHistoryModal(true)} className="header-button" disabled={isProcessing}>History</button>
                         <button onClick={handleNewChat} className="header-button" disabled={isProcessing}>New Chat</button>
                         <button onClick={() => handleLogout(false)} className="header-button" disabled={isProcessing}>Logout</button>
                     </div>
@@ -818,6 +997,53 @@ const ChatPage = ({ setIsAuthenticated }) => {
                                                         {msg.podcastData.script}
                                                     </div>
                                                 </details>
+                                            </div>
+                                        </div>
+                                    ) : msg.metadata?.searchType === 'document_generation' && msg.downloadUrl ? (
+                                        <div className="document-generation-container">
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{messageText}</ReactMarkdown>
+                                            <div className="document-download-section">
+                                                <button
+                                                    className="document-download-btn"
+                                                    onClick={async () => {
+                                                        try {
+                                                            const token = localStorage.getItem('token');
+                                                            const userId = localStorage.getItem('userId');
+
+                                                            const response = await fetch(msg.downloadUrl, {
+                                                                method: 'GET',
+                                                                headers: {
+                                                                    'Authorization': `Bearer ${token}`,
+                                                                    'x-user-id': userId
+                                                                }
+                                                            });
+
+                                                            if (response.ok) {
+                                                                const blob = await response.blob();
+                                                                const url = window.URL.createObjectURL(blob);
+                                                                const link = document.createElement('a');
+                                                                link.href = url;
+                                                                link.download = msg.fileName || 'document';
+                                                                document.body.appendChild(link);
+                                                                link.click();
+                                                                document.body.removeChild(link);
+                                                                window.URL.revokeObjectURL(url);
+                                                            } else {
+                                                                console.error('Download failed:', response.statusText);
+                                                                alert('Download failed. Please try again.');
+                                                            }
+                                                        } catch (error) {
+                                                            console.error('Download error:', error);
+                                                            alert('Download failed. Please try again.');
+                                                        }
+                                                    }}
+                                                >
+                                                    📄 Download {msg.documentType?.toUpperCase() || 'Document'}
+                                                </button>
+                                                <div className="document-info">
+                                                    <span className="file-name">📁 {msg.fileName}</span>
+                                                    <span className="file-type">{msg.documentType?.toUpperCase()}</span>
+                                                </div>
                                             </div>
                                         </div>
                                     ) : (
