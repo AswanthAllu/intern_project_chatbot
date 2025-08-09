@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getBaseModels, getCheckpoints } from '../services/api';
+import { getBaseModels, getCheckpoints, getTrainedModels } from '../services/api';
 import CustomModelManager from './CustomModelManager';
 import OllamaModelManager from './OllamaModelManager';
 import './AdvancedTrainingConfig.css';
@@ -22,6 +22,8 @@ const AdvancedTrainingConfig = ({
     const [modelSourceTab, setModelSourceTab] = useState('foundation'); // 'foundation', 'custom', 'ollama'
     const [selectedCustomModel, setSelectedCustomModel] = useState(null);
     const [selectedOllamaModel, setSelectedOllamaModel] = useState(null);
+    const [availableModels, setAvailableModels] = useState([]);
+    const [selectedModelToRetrain, setSelectedModelToRetrain] = useState(null);
 
     // Enhanced training configuration state
     const [hardwareConfig, setHardwareConfig] = useState({
@@ -81,6 +83,7 @@ const AdvancedTrainingConfig = ({
     useEffect(() => {
         if (subject) {
             loadCheckpoints(subject);
+            loadAvailableModels();
         }
     }, [subject]);
 
@@ -212,6 +215,18 @@ const AdvancedTrainingConfig = ({
         }
     };
 
+    const loadAvailableModels = async () => {
+        try {
+            const response = await getTrainedModels();
+            const models = response.data.models || [];
+            // Filter models for the current subject
+            const subjectModels = models.filter(model => model.subject === subject);
+            setAvailableModels(subjectModels);
+        } catch (error) {
+            console.error('Error loading available models:', error);
+        }
+    };
+
     const handleTrainingModeChange = (mode) => {
         setTrainingMode(mode);
         
@@ -282,11 +297,20 @@ const AdvancedTrainingConfig = ({
         });
     };
 
+    const handleModelToRetrainSelect = (model) => {
+        setSelectedModelToRetrain(model);
+        onConfigChange({
+            ...config,
+            modelToRetrain: model,
+            retrainModelId: model.id
+        });
+    };
+
     const getCompatibleModels = () => {
-        return baseModels.filter(model => 
-            model.compatible_subjects.includes(subject) || 
-            model.compatible_subjects.includes('general')
-        );
+        return baseModels.filter(model => {
+            const subjects = model.compatible_subjects || [];
+            return subjects.includes(subject) || subjects.includes('general');
+        });
     };
 
     const getSubjectCheckpoints = () => {
@@ -524,24 +548,61 @@ const AdvancedTrainingConfig = ({
                 </div>
             )}
 
-            {/* Retrain Mode Info */}
+            {/* Retrain Mode - Model Selection */}
             {trainingMode === 'retrain' && (
                 <div className="config-section">
-                    <h4>Retrain Existing Model</h4>
-                    <div className="retrain-info">
-                        <div className="info-item">
-                            <div className="info-icon">🔧</div>
+                    <h4>Select Model to Retrain</h4>
+                    {availableModels.length > 0 ? (
+                        <div className="model-grid">
+                            {availableModels.map(model => (
+                                <div
+                                    key={model.id}
+                                    className={`model-card ${selectedModelToRetrain?.id === model.id ? 'selected' : ''}`}
+                                    onClick={() => handleModelToRetrainSelect(model)}
+                                >
+                                    <div className="model-header">
+                                        <div className="model-name">{model.name || `${model.subject} Model`}</div>
+                                        <div className="model-size">{model.size}</div>
+                                    </div>
+                                    <div className="model-description">
+                                        {model.description || `Trained ${model.subject} model`}
+                                    </div>
+                                    <div className="model-metrics">
+                                        <span className="metric">Accuracy: {model.accuracy}%</span>
+                                        <span className="metric">Epochs: {model.trainingConfig?.epochs || 'N/A'}</span>
+                                    </div>
+                                    <div className="model-date">
+                                        Created: {new Date(model.createdAt).toLocaleDateString()}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="no-models-message">
+                            <div className="info-icon">📭</div>
                             <div className="info-text">
-                                This will continue training your existing {subject} model with new data or different parameters.
+                                No trained models found for {subject}. Train a model first before retraining.
                             </div>
                         </div>
-                        <div className="info-item">
-                            <div className="info-icon">📈</div>
-                            <div className="info-text">
-                                The model will build upon its existing knowledge to improve performance.
+                    )}
+
+                    {selectedModelToRetrain && (
+                        <div className="retrain-info">
+                            <h5>Retraining Information</h5>
+                            <div className="info-item">
+                                <div className="info-icon">🔧</div>
+                                <div className="info-text">
+                                    This will continue training "{selectedModelToRetrain.name}" with new data or different parameters.
+                                </div>
+                            </div>
+                            <div className="info-item">
+                                <div className="info-icon">📈</div>
+                                <div className="info-text">
+                                    The model will build upon its existing knowledge to improve performance.
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             )}
 

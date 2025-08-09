@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const { spawn } = require('child_process');
 const multer = require('multer');
 const { tempAuth } = require('../middleware/authMiddleware');
@@ -964,8 +965,9 @@ router.post('/start', tempAuth, async (req, res) => {
             addTrainingLog(`Transfer learning from: ${config.transferFromSubject}`);
         }
 
-        if (config.retrainExisting) {
-            addTrainingLog(`Retraining existing ${subject} model`);
+        if (config.retrainExisting && config.retrainModelId) {
+            addTrainingLog(`Retraining existing ${subject} model: ${config.retrainModelId}`);
+            addTrainingLog(`Base model will be loaded from previous training`);
         }
 
         addTrainingLog(`Configuration: ${config.modelSize} parameters, ${config.epochs} epochs`);
@@ -1061,6 +1063,136 @@ router.get('/models', tempAuth, async (req, res) => {
     }
 });
 
+// Get trained models for chat interface
+router.get('/models/chat', tempAuth, async (req, res) => {
+    try {
+        const modelsDir = path.join(__dirname, '..', 'ml_training', 'models');
+        const models = [];
+
+        // Check for saved models
+        try {
+            const modelFiles = await fs.readdir(modelsDir);
+            for (const file of modelFiles) {
+                if (file.endsWith('.json')) {
+                    try {
+                        const modelPath = path.join(modelsDir, file);
+                        const modelData = JSON.parse(await fs.readFile(modelPath, 'utf8'));
+
+                        // Transform for chat interface
+                        models.push({
+                            id: `trained-${file.replace('.json', '')}`,
+                            name: `${modelData.subject} Specialist`,
+                            provider: 'Custom Trained',
+                            type: 'trained',
+                            icon: '🧠',
+                            description: `Specialized model for ${modelData.subject}`,
+                            status: 'available',
+                            subject: modelData.subject,
+                            accuracy: modelData.accuracy || 85,
+                            size: modelData.size || '1B',
+                            createdAt: modelData.createdAt
+                        });
+                    } catch (err) {
+                        console.error(`Error reading model file ${file}:`, err);
+                    }
+                }
+            }
+        } catch (err) {
+            console.log('Models directory not found or empty');
+        }
+
+        res.json({
+            success: true,
+            models: models
+        });
+    } catch (error) {
+        console.error('Error fetching trained models for chat:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Delete trained model
+router.delete('/models/:modelId', tempAuth, async (req, res) => {
+    try {
+        const { modelId } = req.params;
+        console.log(`🗑️ Delete request for model: ${modelId}`);
+
+        const modelsDir = path.join(__dirname, '..', 'ml_training', 'models');
+        const checkpointsDir = path.join(__dirname, '..', 'ml_training', 'checkpoints');
+
+        let deletedFiles = [];
+        let errors = [];
+
+        // Delete model JSON file
+        const modelJsonPath = path.join(modelsDir, `${modelId}.json`);
+        try {
+            await fs.unlink(modelJsonPath);
+            deletedFiles.push(`Model JSON: ${modelJsonPath}`);
+            console.log(`✅ Deleted model JSON: ${modelJsonPath}`);
+        } catch (err) {
+            errors.push(`Model JSON not found: ${modelJsonPath}`);
+            console.log(`⚠️ Model JSON not found: ${modelJsonPath}`);
+        }
+
+        // Delete model checkpoint files (try multiple formats)
+        const checkpointFormats = ['.zip', '.pt', '.pth', '.bin', '.safetensors'];
+        for (const format of checkpointFormats) {
+            const checkpointPath = path.join(checkpointsDir, `${modelId}${format}`);
+            try {
+                await fs.unlink(checkpointPath);
+                deletedFiles.push(`Checkpoint: ${checkpointPath}`);
+                console.log(`✅ Deleted checkpoint: ${checkpointPath}`);
+            } catch (err) {
+                // Don't log as error since we're trying multiple formats
+            }
+        }
+
+        // Delete any additional model files/directories
+        const modelDir = path.join(modelsDir, modelId);
+        try {
+            await fs.rmdir(modelDir, { recursive: true });
+            deletedFiles.push(`Model directory: ${modelDir}`);
+            console.log(`✅ Deleted model directory: ${modelDir}`);
+        } catch (err) {
+            console.log(`⚠️ Model directory not found: ${modelDir}`);
+        }
+
+        // Check if we deleted at least the JSON file (minimum requirement)
+        if (deletedFiles.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: `Model ${modelId} not found. No files were deleted.`,
+                details: errors
+            });
+        }
+
+        res.json({
+            success: true,
+            message: `Model ${modelId} deleted successfully`,
+            deletedFiles: deletedFiles,
+            warnings: errors.length > 0 ? errors : undefined
+        });
+    } catch (error) {
+        console.error('❌ Error deleting model:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Test download endpoint
+router.get('/download/test', (req, res) => {
+    res.json({
+        success: true,
+        message: 'Download endpoint is working',
+        timestamp: new Date().toISOString()
+    });
+});
+
 // Download model (supports both ZIP and JSON formats)
 router.get('/download/:modelId', tempAuth, async (req, res) => {
     try {
@@ -1071,72 +1203,134 @@ router.get('/download/:modelId', tempAuth, async (req, res) => {
 
         // Default to ZIP format
         const downloadFormat = format === 'json' ? 'json' : 'zip';
-        const filePath = path.join(__dirname, '..', 'ml_training', 'checkpoints', `${modelId}.${downloadFormat}`);
 
-        console.log(`Looking for file at: ${filePath}`);
+        // Check if model exists in models directory (real model files)
+        const modelDir = path.join(__dirname, '..', 'ml_training', 'models', modelId);
+        const modelJsonPath = path.join(__dirname, '..', 'ml_training', 'models', `${modelId}.json`);
 
-        // Check if model file exists
+        console.log(`Checking for model directory: ${modelDir}`);
+        console.log(`Checking for model JSON: ${modelJsonPath}`);
+
         try {
-            await fs.access(filePath);
-            console.log(`Model file found, starting download: ${modelId}.${downloadFormat}`);
+            // Check if model directory exists (real trained model)
+            const modelDirExists = await fs.access(modelDir).then(() => true).catch(() => false);
+            const modelJsonExists = await fs.access(modelJsonPath).then(() => true).catch(() => false);
 
-            if (downloadFormat === 'zip') {
-                // Download ZIP file
-                res.setHeader('Content-Type', 'application/zip');
-                res.setHeader('Content-Disposition', `attachment; filename="${modelId}_model.zip"`);
+            if (modelDirExists && modelJsonExists) {
+                console.log(`Real model found, creating download package: ${modelId}`);
 
-                res.download(filePath, `${modelId}_model.zip`, (err) => {
-                    if (err) {
-                        console.error('Error during ZIP download:', err);
-                        if (!res.headersSent) {
-                            res.status(500).json({
-                                success: false,
-                                error: 'Download failed'
-                            });
+                if (downloadFormat === 'zip') {
+                    // Create ZIP package from real model files
+                    const zipPath = await createRealModelZipFile(modelId, modelDir, modelJsonPath);
+
+                    res.setHeader('Content-Type', 'application/zip');
+                    res.setHeader('Content-Disposition', `attachment; filename="${modelId}_model.zip"`);
+
+                    res.download(zipPath, `${modelId}_model.zip`, (err) => {
+                        if (err) {
+                            console.error('Error during ZIP download:', err);
+                            if (!res.headersSent) {
+                                res.status(500).json({
+                                    success: false,
+                                    error: 'Download failed'
+                                });
+                            }
+                        } else {
+                            console.log(`ZIP download completed successfully: ${modelId}`);
+                            // Clean up temporary ZIP file
+                            fs.unlink(zipPath).catch(console.error);
                         }
-                    } else {
-                        console.log(`ZIP download completed successfully: ${modelId}`);
-                    }
-                });
-            } else {
-                // Download JSON file
-                const modelPackage = await fs.readFile(filePath, 'utf8');
-                const packageData = JSON.parse(modelPackage);
+                    });
+                } else {
+                    // Download JSON metadata
+                    const modelMetadata = await fs.readFile(modelJsonPath, 'utf8');
+                    const packageData = JSON.parse(modelMetadata);
 
-                res.setHeader('Content-Type', 'application/json');
-                res.setHeader('Content-Disposition', `attachment; filename="${modelId}_model_package.json"`);
+                    res.setHeader('Content-Type', 'application/json');
+                    res.setHeader('Content-Disposition', `attachment; filename="${modelId}_model_info.json"`);
 
-                res.send(JSON.stringify(packageData, null, 2));
-                console.log(`JSON download completed successfully: ${modelId}`);
+                    res.send(JSON.stringify(packageData, null, 2));
+                    console.log(`JSON download completed successfully: ${modelId}`);
+                }
+                return;
             }
 
-        } catch (err) {
-            console.log(`Model file not found: ${filePath}`);
+            // Fallback to checkpoint files (legacy models)
+            const checkpointZipPath = path.join(__dirname, '..', 'ml_training', 'checkpoints', `${modelId}.zip`);
+            const checkpointJsonPath = path.join(__dirname, '..', 'ml_training', 'checkpoints', `${modelId}.json`);
 
-            // If ZIP not found, try JSON as fallback
+            console.log(`Real model not found, checking checkpoints: ${checkpointZipPath}`);
+
             if (downloadFormat === 'zip') {
-                const jsonPath = path.join(__dirname, '..', 'ml_training', 'checkpoints', `${modelId}.json`);
                 try {
-                    await fs.access(jsonPath);
-                    console.log(`ZIP not found, falling back to JSON: ${modelId}`);
+                    await fs.access(checkpointZipPath);
+                    console.log(`Checkpoint ZIP found: ${modelId}`);
 
-                    const modelPackage = await fs.readFile(jsonPath, 'utf8');
+                    res.setHeader('Content-Type', 'application/zip');
+                    res.setHeader('Content-Disposition', `attachment; filename="${modelId}_model.zip"`);
+
+                    res.download(checkpointZipPath, `${modelId}_model.zip`, (err) => {
+                        if (err) {
+                            console.error('Error during checkpoint ZIP download:', err);
+                            if (!res.headersSent) {
+                                res.status(500).json({
+                                    success: false,
+                                    error: 'Download failed'
+                                });
+                            }
+                        } else {
+                            console.log(`Checkpoint ZIP download completed: ${modelId}`);
+                        }
+                    });
+                    return;
+                } catch (zipErr) {
+                    // Try JSON fallback
+                    try {
+                        await fs.access(checkpointJsonPath);
+                        console.log(`ZIP not found, falling back to checkpoint JSON: ${modelId}`);
+
+                        const modelPackage = await fs.readFile(checkpointJsonPath, 'utf8');
+                        const packageData = JSON.parse(modelPackage);
+
+                        res.setHeader('Content-Type', 'application/json');
+                        res.setHeader('Content-Disposition', `attachment; filename="${modelId}_model_package.json"`);
+
+                        res.send(JSON.stringify(packageData, null, 2));
+                        console.log(`Fallback JSON download completed: ${modelId}`);
+                        return;
+                    } catch (jsonErr) {
+                        // Neither ZIP nor JSON found
+                    }
+                }
+            } else {
+                // JSON format requested
+                try {
+                    await fs.access(checkpointJsonPath);
+                    const modelPackage = await fs.readFile(checkpointJsonPath, 'utf8');
                     const packageData = JSON.parse(modelPackage);
 
                     res.setHeader('Content-Type', 'application/json');
                     res.setHeader('Content-Disposition', `attachment; filename="${modelId}_model_package.json"`);
 
                     res.send(JSON.stringify(packageData, null, 2));
-                    console.log(`Fallback JSON download completed: ${modelId}`);
+                    console.log(`Checkpoint JSON download completed: ${modelId}`);
                     return;
                 } catch (jsonErr) {
-                    // Both ZIP and JSON not found
+                    // JSON not found
                 }
             }
 
+            // Model not found anywhere
             res.status(404).json({
                 success: false,
-                error: `Model file not found: ${modelId}. The model may not have completed training yet, or you may be trying to download an older model that was created before the download feature was implemented.`
+                error: `Model not found: ${modelId}. The model may not have completed training yet, or the model files may have been moved or deleted.`
+            });
+
+        } catch (err) {
+            console.error('Error checking model files:', err);
+            res.status(500).json({
+                success: false,
+                error: 'Error accessing model files'
             });
         }
     } catch (error) {
@@ -1240,16 +1434,33 @@ router.post('/data/upload', tempAuth, upload.single('file'), async (req, res) =>
 // Process text data
 router.post('/data/text', tempAuth, async (req, res) => {
     try {
+        console.log('Processing text data request...');
+        console.log('Request body keys:', Object.keys(req.body));
+        console.log('Request body:', JSON.stringify(req.body, null, 2));
+
         const { subject, data } = req.body;
 
-        if (!data || !data.trim()) {
+        if (!subject) {
+            console.log('Missing subject in request');
             return res.status(400).json({
                 success: false,
-                error: 'No data provided'
+                error: 'Subject is required'
             });
         }
 
+        if (!data || (typeof data === 'string' && !data.trim()) || (Array.isArray(data) && data.length === 0)) {
+            console.log('Missing or empty data in request');
+            return res.status(400).json({
+                success: false,
+                error: 'No training data provided'
+            });
+        }
+
+        console.log(`Processing ${typeof data === 'string' ? 'string' : 'array'} data for subject: ${subject}`);
+
         const result = await processTrainingData(subject, data);
+
+        console.log(`Successfully processed ${result.count} training examples`);
 
         res.json({
             success: true,
@@ -1300,15 +1511,17 @@ router.post('/data/url', tempAuth, async (req, res) => {
 // Generate sample data
 router.post('/data/generate', tempAuth, async (req, res) => {
     try {
-        const { subject, count = 100 } = req.body;
+        const { subject, count = 10 } = req.body;
 
-        const sampleData = generateSampleData(subject, count);
-        const result = await processTrainingData(subject, sampleData);
+        console.log(`Generating ${count} sample data for subject: ${subject}`);
+
+        const sampleData = generateSampleDataArray(subject, count);
 
         res.json({
             success: true,
-            count: result.count,
-            message: `Successfully generated ${result.count} sample training examples`
+            samples: sampleData,
+            count: sampleData.length,
+            message: `Successfully generated ${sampleData.length} sample training examples for ${subject}`
         });
 
     } catch (error) {
@@ -1351,14 +1564,26 @@ async function startTrainingProcess(subject, config) {
             args.push('--use-lora');
         }
 
-        // Start Python training process
-        const pythonProcess = spawn('python', args, {
-            cwd: path.join(__dirname, '..', 'ml_training'),
-            stdio: ['pipe', 'pipe', 'pipe']
-        });
+        // Try real ML training first, fallback to mock if dependencies missing
+        addTrainingLog('🔍 Attempting real ML training...');
+        return startRealMLTraining(subject, config);
 
-        trainingState.process = pythonProcess;
-        trainingState.status = 'training';
+        // Complex trainer code (disabled due to dependency issues)
+        /*
+        let pythonProcess;
+        try {
+            pythonProcess = spawn('python', args, {
+                cwd: path.join(__dirname, '..', 'ml_training'),
+                stdio: ['pipe', 'pipe', 'pipe']
+            });
+        } catch (spawnError) {
+            addTrainingLog('⚠️ Failed to start complex trainer. Using simple mock trainer...');
+            return startSimpleMockTraining(subject, config);
+        }
+        */
+
+        // trainingState.process = pythonProcess; // Disabled - using simple mock trainer
+        // trainingState.status = 'training'; // Status set in simple mock trainer
 
         // Handle process output
         pythonProcess.stdout.on('data', (data) => {
@@ -1372,21 +1597,29 @@ async function startTrainingProcess(subject, config) {
             }
         });
 
+        let fallbackTriggered = false;
+
         pythonProcess.stderr.on('data', (data) => {
             const error = data.toString().trim();
             addTrainingLog(`Error: ${error}`);
 
             // Check for common dependency errors
-            if (error.includes('ModuleNotFoundError') || error.includes('ImportError')) {
-                addTrainingLog('⚠️ Missing Python dependencies detected. Falling back to mock training...');
+            if (!fallbackTriggered && (error.includes('ModuleNotFoundError') || error.includes('ImportError'))) {
+                fallbackTriggered = true;
+                addTrainingLog('⚠️ Missing Python dependencies detected. Falling back to simple mock training...');
                 pythonProcess.kill();
                 setTimeout(() => {
-                    startMockTraining(subject, config);
+                    startSimpleMockTraining(subject, config);
                 }, 1000);
             }
         });
 
         pythonProcess.on('close', (code) => {
+            if (fallbackTriggered) {
+                // Don't process close event if fallback was triggered
+                return;
+            }
+
             if (code === 0) {
                 trainingState.status = 'completed';
                 trainingState.progress = 100;
@@ -1403,6 +1636,181 @@ async function startTrainingProcess(subject, config) {
         console.error('Error starting training process:', error);
         addTrainingLog(`Error starting training: ${error.message}`);
         return false;
+    }
+}
+
+// Real ML training using transformers
+async function startRealMLTraining(subject, config) {
+    try {
+        const realTrainerScript = path.join(__dirname, '..', 'ml_training', 'scripts', 'real_ml_trainer.py');
+
+        // Check if real trainer script exists
+        if (!fsSync.existsSync(realTrainerScript)) {
+            addTrainingLog('⚠️ Real ML trainer not found. Using simple mock trainer...');
+            return startSimpleMockTraining(subject, config);
+        }
+
+        // Prepare arguments for real ML trainer
+        const args = [
+            realTrainerScript,
+            subject,
+            config.modelSize,
+            config.epochs.toString(),
+            config.batchSize.toString(),
+            config.learningRate.toString()
+        ];
+
+        // Add retrain model ID if retraining
+        if (config.retrainExisting && config.retrainModelId) {
+            args.push(config.retrainModelId);
+        }
+
+        addTrainingLog('🚀 Starting REAL ML training with transformers...');
+        addTrainingLog(`📚 Subject: ${subject}`);
+        addTrainingLog(`⚙️ Configuration: ${config.modelSize} parameters, ${config.epochs} epochs`);
+        addTrainingLog('📦 Checking ML dependencies...');
+
+        // Start Python real ML training process
+        const pythonProcess = spawn('python', args, {
+            cwd: path.join(__dirname, '..', 'ml_training'),
+            stdio: ['pipe', 'pipe', 'pipe']
+        });
+
+        trainingState.process = pythonProcess;
+        trainingState.status = 'training';
+
+        let dependencyCheckFailed = false;
+
+        // Handle process output
+        pythonProcess.stdout.on('data', (data) => {
+            const output = data.toString().trim();
+            addTrainingLog(output);
+
+            // Parse progress from output
+            if (output.includes('Epoch')) {
+                const epochMatch = output.match(/Epoch (\d+)\/(\d+)/);
+                if (epochMatch) {
+                    const currentEpoch = parseInt(epochMatch[1]);
+                    const totalEpochs = parseInt(epochMatch[2]);
+                    trainingState.progress = Math.round((currentEpoch / totalEpochs) * 100);
+                }
+            }
+        });
+
+        pythonProcess.stderr.on('data', (data) => {
+            const error = data.toString().trim();
+            addTrainingLog(`Error: ${error}`);
+
+            // Check for dependency errors
+            if (error.includes('ModuleNotFoundError') || error.includes('ImportError') || error.includes('missing dependencies')) {
+                if (!dependencyCheckFailed) {
+                    dependencyCheckFailed = true;
+                    addTrainingLog('⚠️ ML dependencies not available. Falling back to mock training...');
+                    pythonProcess.kill();
+                    setTimeout(() => {
+                        startSimpleMockTraining(subject, config);
+                    }, 1000);
+                }
+            }
+        });
+
+        pythonProcess.on('close', (code) => {
+            if (dependencyCheckFailed) {
+                // Don't process close event if fallback was triggered
+                return;
+            }
+
+            if (code === 0) {
+                trainingState.status = 'completed';
+                trainingState.progress = 100;
+                addTrainingLog('✅ REAL ML training completed successfully!');
+                addTrainingLog('🎉 You now have a real trained transformer model!');
+            } else {
+                addTrainingLog('⚠️ Real ML training failed. Falling back to mock training...');
+                startSimpleMockTraining(subject, config);
+            }
+        });
+
+        return true;
+    } catch (error) {
+        console.error('Error starting real ML training:', error);
+        addTrainingLog(`❌ Error starting real ML training: ${error.message}`);
+        addTrainingLog('⚠️ Falling back to mock training...');
+        return startSimpleMockTraining(subject, config);
+    }
+}
+
+// Simple mock training using Python script
+async function startSimpleMockTraining(subject, config) {
+    try {
+        const mockTrainerScript = path.join(__dirname, '..', 'ml_training', 'scripts', 'simple_mock_trainer.py');
+
+        // Prepare arguments for simple mock trainer
+        const args = [
+            mockTrainerScript,
+            subject,
+            config.modelSize,
+            config.epochs.toString(),
+            config.batchSize.toString(),
+            config.learningRate.toString()
+        ];
+
+        // Add retrain model ID if retraining
+        if (config.retrainExisting && config.retrainModelId) {
+            args.push(config.retrainModelId);
+        }
+
+        addTrainingLog('🚀 Starting simple mock training...');
+        addTrainingLog(`📚 Subject: ${subject}`);
+        addTrainingLog(`⚙️ Configuration: ${config.modelSize} parameters, ${config.epochs} epochs`);
+
+        // Start Python mock training process
+        const pythonProcess = spawn('python', args, {
+            cwd: path.join(__dirname, '..', 'ml_training'),
+            stdio: ['pipe', 'pipe', 'pipe']
+        });
+
+        trainingState.process = pythonProcess;
+        trainingState.status = 'training';
+
+        // Handle process output
+        pythonProcess.stdout.on('data', (data) => {
+            const output = data.toString().trim();
+            addTrainingLog(output);
+
+            // Parse progress from output
+            if (output.includes('Epoch')) {
+                const epochMatch = output.match(/Epoch (\d+)\/(\d+)/);
+                if (epochMatch) {
+                    const currentEpoch = parseInt(epochMatch[1]);
+                    const totalEpochs = parseInt(epochMatch[2]);
+                    trainingState.progress = Math.round((currentEpoch / totalEpochs) * 100);
+                }
+            }
+        });
+
+        pythonProcess.stderr.on('data', (data) => {
+            const error = data.toString().trim();
+            addTrainingLog(`Error: ${error}`);
+        });
+
+        pythonProcess.on('close', (code) => {
+            if (code === 0) {
+                trainingState.status = 'completed';
+                trainingState.progress = 100;
+                addTrainingLog('✅ Simple mock training completed successfully!');
+            } else {
+                trainingState.status = 'error';
+                addTrainingLog(`❌ Simple mock training failed with exit code ${code}`);
+            }
+        });
+
+        return true;
+    } catch (error) {
+        console.error('Error starting simple mock training:', error);
+        addTrainingLog(`❌ Error starting simple mock training: ${error.message}`);
+        // Fallback to the original mock training
+        return startMockTraining(subject, config);
     }
 }
 
@@ -1616,7 +2024,107 @@ async function saveModelInfo(subject, config) {
     }
 }
 
-// Helper function to create a proper ZIP file for model download
+// Helper function to create a ZIP file from real model files
+async function createRealModelZipFile(modelId, modelDir, modelJsonPath) {
+    try {
+        const archiver = require('archiver');
+        const tempDir = path.join(__dirname, '..', 'temp');
+        await fs.mkdir(tempDir, { recursive: true });
+
+        const zipPath = path.join(tempDir, `${modelId}_download.zip`);
+        const output = require('fs').createWriteStream(zipPath);
+        const archive = archiver('zip', {
+            zlib: { level: 9 } // Maximum compression
+        });
+
+        return new Promise(async (resolve, reject) => {
+            output.on('close', () => {
+                console.log(`Real model ZIP created: ${archive.pointer()} total bytes`);
+                resolve(zipPath);
+            });
+
+            archive.on('error', (err) => {
+                console.error('Error creating real model ZIP:', err);
+                reject(err);
+            });
+
+            archive.pipe(output);
+
+            try {
+                // Add model metadata
+                const modelMetadata = await fs.readFile(modelJsonPath, 'utf8');
+                archive.append(modelMetadata, { name: 'model_info.json' });
+
+                // Add all files from the model directory
+                const files = await fs.readdir(modelDir);
+                for (const file of files) {
+                    const filePath = path.join(modelDir, file);
+                    const stats = await fs.stat(filePath);
+
+                    if (stats.isFile()) {
+                        console.log(`Adding file to ZIP: ${file}`);
+                        const fileContent = await fs.readFile(filePath);
+                        archive.append(fileContent, { name: file });
+                    }
+                }
+
+                // Add README with model information
+                const modelInfo = JSON.parse(modelMetadata);
+                const readme = `# ${modelInfo.name || modelId}
+
+## Model Information
+- **Subject**: ${modelInfo.subject}
+- **Size**: ${modelInfo.size}
+- **Accuracy**: ${modelInfo.accuracy}%
+- **Status**: ${modelInfo.status}
+- **Created**: ${modelInfo.createdAt}
+
+## Description
+${modelInfo.description || 'Trained model for specialized tasks'}
+
+## Training Configuration
+- **Epochs**: ${modelInfo.trainingConfig?.epochs || 'N/A'}
+- **Batch Size**: ${modelInfo.trainingConfig?.batchSize || 'N/A'}
+- **Learning Rate**: ${modelInfo.trainingConfig?.learningRate || 'N/A'}
+- **Base Model**: ${modelInfo.trainingConfig?.baseModel || 'N/A'}
+
+## Model Files
+- **model.safetensors**: Main model weights
+- **config.json**: Model configuration
+- **tokenizer.json**: Tokenizer configuration
+- **tokenizer_config.json**: Tokenizer settings
+- **vocab.json**: Vocabulary mapping
+- **merges.txt**: BPE merges
+- **generation_config.json**: Generation parameters
+
+## Usage
+This model can be loaded using the Transformers library:
+
+\`\`\`python
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+tokenizer = AutoTokenizer.from_pretrained("./")
+model = AutoModelForCausalLM.from_pretrained("./")
+\`\`\`
+
+## Performance Metrics
+${modelInfo.metrics ? Object.entries(modelInfo.metrics).map(([key, value]) => `- **${key}**: ${value}`).join('\n') : 'No metrics available'}
+`;
+
+                archive.append(readme, { name: 'README.md' });
+
+                archive.finalize();
+            } catch (err) {
+                reject(err);
+            }
+        });
+    } catch (error) {
+        console.error('Error creating real model ZIP file:', error);
+        throw error;
+    }
+}
+
+// Helper function to create a proper ZIP file for model download (legacy)
 async function createModelZipFile(modelId, modelPackage) {
     try {
         const checkpointsDir = path.join(__dirname, '..', 'ml_training', 'checkpoints');
@@ -1672,15 +2180,26 @@ async function processTrainingData(subject, dataContent) {
         try {
             const example = JSON.parse(line);
 
-            // Validate required fields
-            if (example.input && example.target) {
-                // Add default fields if missing
-                if (!example.category) example.category = 'general';
-                if (!example.difficulty) example.difficulty = 'intermediate';
-                if (!example.source) example.source = 'user_upload';
+            // Normalize field names and validate required fields
+            const normalizedExample = {
+                input: example.input || example.question || example.instruction,
+                target: example.target || example.answer || example.response || example.output,
+                category: example.category || 'general',
+                difficulty: example.difficulty || 'intermediate',
+                source: example.source || 'user_upload',
+                subject: example.subject || subject
+            };
 
-                validExamples.push(example);
+            if (normalizedExample.input && normalizedExample.target) {
+                // Validate minimum length
+                if (normalizedExample.input.length >= 5 && normalizedExample.target.length >= 3) {
+                    validExamples.push(normalizedExample);
+                } else {
+                    console.log(`Skipping example with too short content: input=${normalizedExample.input.length} chars, target=${normalizedExample.target.length} chars`);
+                    errorCount++;
+                }
             } else {
+                console.log(`Skipping example missing required fields:`, example);
                 errorCount++;
             }
         } catch (err) {
@@ -1738,53 +2257,94 @@ async function extractDataFromUrl(url, subject) {
     return sampleExamples;
 }
 
-// Generate sample training data
-function generateSampleData(subject, count) {
+// Generate sample training data as array (for API)
+function generateSampleDataArray(subject, count) {
     const examples = [];
 
-    const templates = {
+    const sampleData = {
         mathematics: [
-            { input: "What is {a} + {b}?", target: "{a} + {b} = {result}", category: "arithmetic" },
-            { input: "Solve for x: {a}x + {b} = {c}", target: "x = ({c} - {b}) / {a} = {result}", category: "algebra" },
-            { input: "What is the derivative of x^{n}?", target: "The derivative of x^{n} is {n}x^{n-1}", category: "calculus" }
+            { question: "What is 2 + 3?", answer: "2 + 3 = 5" },
+            { question: "Solve for x: 2x + 4 = 10", answer: "2x + 4 = 10\n2x = 10 - 4\n2x = 6\nx = 3" },
+            { question: "What is the derivative of x²?", answer: "The derivative of x² is 2x" },
+            { question: "Calculate the area of a circle with radius 3", answer: "Area = πr² = π(3)² = 9π ≈ 28.27 square units" },
+            { question: "What is 15% of 80?", answer: "15% of 80 = 0.15 × 80 = 12" },
+            { question: "Solve: 3x - 7 = 14", answer: "3x - 7 = 14\n3x = 21\nx = 7" },
+            { question: "What is the Pythagorean theorem?", answer: "The Pythagorean theorem states that a² + b² = c², where c is the hypotenuse" },
+            { question: "Factor: x² - 9", answer: "x² - 9 = (x + 3)(x - 3)" },
+            { question: "What is the slope of y = 2x + 5?", answer: "The slope is 2 (the coefficient of x)" },
+            { question: "Calculate: 7! (7 factorial)", answer: "7! = 7 × 6 × 5 × 4 × 3 × 2 × 1 = 5,040" }
         ],
         programming: [
-            { input: "How do you create a function in {lang}?", target: "In {lang}, you create a function using: {syntax}", category: "syntax" },
-            { input: "What is a {concept} in programming?", target: "A {concept} is {definition}", category: "concepts" },
-            { input: "How do you implement {algorithm}?", target: "To implement {algorithm}: {steps}", category: "algorithms" }
+            { question: "How do you declare a variable in Python?", answer: "In Python, you declare a variable by simply assigning a value: variable_name = value" },
+            { question: "What is a function in programming?", answer: "A function is a reusable block of code that performs a specific task and can accept parameters" },
+            { question: "How do you create a list in Python?", answer: "You create a list using square brackets: my_list = [1, 2, 3, 4]" },
+            { question: "What is the difference between == and === in JavaScript?", answer: "== compares values with type coercion, while === compares values and types strictly" },
+            { question: "How do you write a for loop in Python?", answer: "for i in range(5):\n    print(i)" },
+            { question: "What is object-oriented programming?", answer: "OOP is a programming paradigm based on objects that contain data (attributes) and code (methods)" },
+            { question: "How do you handle exceptions in Python?", answer: "Use try-except blocks:\ntry:\n    # code\nexcept Exception as e:\n    # handle error" },
+            { question: "What is recursion?", answer: "Recursion is when a function calls itself to solve a smaller version of the same problem" },
+            { question: "How do you import a module in Python?", answer: "Use the import statement: import module_name or from module_name import function_name" },
+            { question: "What is the difference between a list and a tuple in Python?", answer: "Lists are mutable (can be changed), while tuples are immutable (cannot be changed)" }
         ],
         science: [
-            { input: "What is {element}?", target: "{element} is {description}", category: "chemistry" },
-            { input: "Explain {concept}", target: "{concept} is {explanation}", category: "physics" },
-            { input: "What is {process}?", target: "{process} is {definition}", category: "biology" }
+            { question: "What is photosynthesis?", answer: "Photosynthesis is the process by which plants convert sunlight, carbon dioxide, and water into glucose and oxygen" },
+            { question: "What is Newton's first law of motion?", answer: "An object at rest stays at rest, and an object in motion stays in motion, unless acted upon by an external force" },
+            { question: "What is the chemical formula for water?", answer: "The chemical formula for water is H₂O (two hydrogen atoms and one oxygen atom)" },
+            { question: "What is DNA?", answer: "DNA (Deoxyribonucleic Acid) is the molecule that carries genetic information in living organisms" },
+            { question: "What is gravity?", answer: "Gravity is the force of attraction between objects with mass, described by Einstein's theory of general relativity" },
+            { question: "What are the three states of matter?", answer: "The three main states of matter are solid, liquid, and gas" },
+            { question: "What is the speed of light?", answer: "The speed of light in a vacuum is approximately 299,792,458 meters per second" },
+            { question: "What is evolution?", answer: "Evolution is the process by which species change over time through natural selection and genetic variation" },
+            { question: "What is the periodic table?", answer: "The periodic table is an organized arrangement of chemical elements based on their atomic number and properties" },
+            { question: "What is energy?", answer: "Energy is the capacity to do work or cause change, and it exists in various forms like kinetic, potential, and thermal" }
         ],
         history: [
-            { input: "What happened in {year}?", target: "In {year}, {event} occurred", category: "timeline" },
-            { input: "Who was {person}?", target: "{person} was {description}", category: "biography" },
-            { input: "What was the {event}?", target: "The {event} was {description}", category: "events" }
+            { question: "When did World War II end?", answer: "World War II ended on September 2, 1945, with Japan's formal surrender" },
+            { question: "Who was the first President of the United States?", answer: "George Washington was the first President of the United States (1789-1797)" },
+            { question: "What was the Renaissance?", answer: "The Renaissance was a period of cultural rebirth in Europe from the 14th to 17th centuries" },
+            { question: "When did the American Civil War take place?", answer: "The American Civil War took place from 1861 to 1865" },
+            { question: "What was the Industrial Revolution?", answer: "The Industrial Revolution was a period of major industrialization from the late 18th to early 19th century" },
+            { question: "Who wrote the Declaration of Independence?", answer: "Thomas Jefferson was the primary author of the Declaration of Independence" },
+            { question: "What was the Cold War?", answer: "The Cold War was a period of geopolitical tension between the US and Soviet Union from 1947 to 1991" },
+            { question: "When did the Berlin Wall fall?", answer: "The Berlin Wall fell on November 9, 1989" },
+            { question: "What was the Great Depression?", answer: "The Great Depression was a severe economic downturn that lasted from 1929 to the late 1930s" },
+            { question: "Who was Napoleon Bonaparte?", answer: "Napoleon was a French military leader and emperor who conquered much of Europe in the early 19th century" }
         ],
         literature: [
-            { input: "Who wrote {book}?", target: "{book} was written by {author}", category: "authors" },
-            { input: "What is the theme of {book}?", target: "The main theme of {book} is {theme}", category: "themes" },
-            { input: "Analyze {character} from {book}", target: "{character} is {analysis}", category: "analysis" }
+            { question: "Who wrote 'Romeo and Juliet'?", answer: "William Shakespeare wrote 'Romeo and Juliet' around 1594-1596" },
+            { question: "What is a metaphor?", answer: "A metaphor is a figure of speech that makes a direct comparison between two unlike things without using 'like' or 'as'" },
+            { question: "Who wrote '1984'?", answer: "George Orwell wrote '1984', published in 1949" },
+            { question: "What is the difference between a simile and a metaphor?", answer: "A simile compares using 'like' or 'as', while a metaphor makes a direct comparison" },
+            { question: "Who wrote 'Pride and Prejudice'?", answer: "Jane Austen wrote 'Pride and Prejudice', published in 1813" },
+            { question: "What is alliteration?", answer: "Alliteration is the repetition of the same consonant sound at the beginning of words in close succession" },
+            { question: "Who wrote 'The Great Gatsby'?", answer: "F. Scott Fitzgerald wrote 'The Great Gatsby', published in 1925" },
+            { question: "What is irony?", answer: "Irony is a literary device where there's a contrast between expectation and reality" },
+            { question: "Who wrote 'To Kill a Mockingbird'?", answer: "Harper Lee wrote 'To Kill a Mockingbird', published in 1960" },
+            { question: "What is symbolism?", answer: "Symbolism is the use of symbols to represent ideas or concepts beyond their literal meaning" }
         ]
     };
 
-    const subjectTemplates = templates[subject] || templates.mathematics;
+    const subjectData = sampleData[subject] || sampleData.mathematics;
 
+    // Return the requested number of samples, cycling through if needed
     for (let i = 0; i < count; i++) {
-        const template = subjectTemplates[i % subjectTemplates.length];
-        const example = {
-            input: template.input.replace(/\{[^}]+\}/g, () => `example_${Math.floor(Math.random() * 100)}`),
-            target: template.target.replace(/\{[^}]+\}/g, () => `result_${Math.floor(Math.random() * 100)}`),
-            category: template.category,
+        const sample = subjectData[i % subjectData.length];
+        examples.push({
+            question: sample.question,
+            answer: sample.answer,
+            subject: subject,
             difficulty: ['easy', 'intermediate', 'hard'][Math.floor(Math.random() * 3)],
             source: 'generated'
-        };
-        examples.push(JSON.stringify(example));
+        });
     }
 
-    return examples.join('\n');
+    return examples;
+}
+
+// Generate sample training data as JSONL string (for legacy compatibility)
+function generateSampleData(subject, count) {
+    const examples = generateSampleDataArray(subject, count);
+    return examples.map(example => JSON.stringify(example)).join('\n');
 }
 
 module.exports = router;

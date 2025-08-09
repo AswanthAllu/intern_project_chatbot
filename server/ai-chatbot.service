@@ -1,0 +1,49 @@
+# =============================================================================
+# Systemd Service File for AI Chatbot Application
+# =============================================================================
+# Copy this file to /etc/systemd/system/ai-chatbot.service
+# Then run:
+# sudo systemctl daemon-reload
+# sudo systemctl enable ai-chatbot
+# sudo systemctl start ai-chatbot
+
+[Unit]
+Description=AI Chatbot Application
+Documentation=https://github.com/your-username/ai-chatbot
+After=network.target mongod.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/path/to/your/app/server
+Environment=NODE_ENV=production
+Environment=PATH=/usr/bin:/usr/local/bin
+Environment=NODE_PATH=/path/to/your/app/server/node_modules
+ExecStart=/usr/bin/node server.js
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+KillSignal=SIGINT
+TimeoutStopSec=5
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=ai-chatbot
+
+# Security settings
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/path/to/your/app/server/logs
+ReadWritePaths=/path/to/your/app/server/uploads
+ReadWritePaths=/path/to/your/app/server/ml_training
+ReadWritePaths=/path/to/your/app/server/temp
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

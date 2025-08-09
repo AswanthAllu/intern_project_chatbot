@@ -84,24 +84,52 @@ router.post('/search', async (req, res) => {
         const { input, history = [], sessionId = '', systemPrompt = '' } = req.body;
         if (!input) return res.status(400).json({ success: false, error: 'input_required' });
 
-        // Use MCP pipeline for enhanced search
-        const result = await client.pipeline(input);
-        const answer = (result && result.result && result.result.answer) || result.answer || '';
+        // Check if MCP service is available
+        try {
+            // Use MCP pipeline for enhanced search
+            const result = await client.pipeline(input);
+            const answer = (result && result.result && result.result.answer) || result.answer || '';
 
-        // Format as normal chat response
-        res.json({
-            success: true,
-            data: {
-                response: answer,
-                metadata: {
-                    searchType: 'mcp_powered',
-                    agentUsed: true,
-                    model: 'mcp-pipeline'
+            // Format as normal chat response
+            res.json({
+                success: true,
+                data: {
+                    response: answer,
+                    metadata: {
+                        searchType: 'mcp_powered',
+                        agentUsed: true,
+                        model: 'mcp-pipeline'
+                    }
                 }
+            });
+        } catch (mcpError) {
+            // MCP service unavailable - return helpful error
+            console.log('MCP service unavailable:', mcpError.message);
+
+            // Check if it's a proxy error or connection error
+            if (mcpError.message.includes('Proxy error') || mcpError.code === 'ECONNREFUSED') {
+                return res.status(503).json({
+                    success: false,
+                    error: 'MCP service is currently unavailable. The AI agent service may not be running.',
+                    details: 'Please check if the MCP HTTP service is running on port 8765.',
+                    suggestedAction: 'disable_mcp'
+                });
             }
-        });
+
+            // Other MCP errors
+            return res.status(500).json({
+                success: false,
+                error: `MCP service error: ${mcpError.message}`,
+                suggestedAction: 'disable_mcp'
+            });
+        }
     } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
+        console.error('MCP search endpoint error:', e);
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error in MCP search',
+            details: e.message
+        });
     }
 });
 

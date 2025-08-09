@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { getCustomModels, deleteCustomModel } from '../services/api';
+import { getCustomModels, deleteCustomModel, getTrainedModels, downloadTrainedModel } from '../services/api';
 import CustomModelUpload from './CustomModelUpload';
 import './CustomModelManager.css';
 
 const CustomModelManager = ({ onModelSelect, selectedModel }) => {
     const [customModels, setCustomModels] = useState([]);
+    const [trainedModels, setTrainedModels] = useState([]);
     const [loading, setLoading] = useState(false);
     const [showUpload, setShowUpload] = useState(false);
     const [error, setError] = useState('');
@@ -14,6 +15,7 @@ const CustomModelManager = ({ onModelSelect, selectedModel }) => {
 
     useEffect(() => {
         loadCustomModels();
+        loadTrainedModels();
         loadAvailableModels();
     }, []);
 
@@ -99,6 +101,37 @@ const CustomModelManager = ({ onModelSelect, selectedModel }) => {
             setError('Failed to load custom models');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadTrainedModels = async () => {
+        try {
+            const response = await getTrainedModels();
+            const models = response.data.models || [];
+
+            // Transform trained models to match custom model format
+            const transformedModels = models.map(model => ({
+                id: model.id,
+                name: model.name || `${model.subject} Specialist`,
+                description: model.description || `Trained model for ${model.subject} tasks`,
+                subject: model.subject,
+                size: model.size || '1B',
+                accuracy: model.accuracy,
+                type: 'trained',
+                format: 'pytorch',
+                architecture: 'transformer',
+                useCase: 'text-generation',
+                createdAt: model.createdAt,
+                trainingConfig: model.trainingConfig,
+                metrics: model.metrics,
+                isRealModel: model.isRealModel || false,
+                status: model.status || 'completed'
+            }));
+
+            setTrainedModels(transformedModels);
+        } catch (error) {
+            console.error('Error loading trained models:', error);
+            // Don't set error for trained models as it's not critical
         }
     };
 
@@ -200,6 +233,73 @@ const CustomModelManager = ({ onModelSelect, selectedModel }) => {
         }
     };
 
+    const handleDownloadTrainedModel = async (model) => {
+        try {
+            console.log('Starting download for trained model:', model.id);
+            console.log('Model details:', model);
+
+            // Test API connectivity first
+            try {
+                const getApiBaseUrl = () => {
+                    const backendPort = process.env.REACT_APP_BACKEND_PORT || 5005;
+                    const hostname = window.location.hostname;
+                    const protocol = window.location.protocol;
+                    return `${protocol}//${hostname}:${backendPort}/api`;
+                };
+
+                const apiBaseUrl = getApiBaseUrl();
+                const testUrl = `${apiBaseUrl}/training/download/test`;
+                console.log('Testing API connectivity at:', testUrl);
+
+                const testResponse = await fetch(testUrl);
+                const testData = await testResponse.json();
+                console.log('API test response:', testData);
+            } catch (testError) {
+                console.error('API test failed:', testError);
+                throw new Error(`Cannot connect to download API: ${testError.message}`);
+            }
+
+            // Use the API service for download
+            console.log('Calling downloadTrainedModel API...');
+            const response = await downloadTrainedModel(model.id);
+            console.log('Download response received:', response);
+
+            // Check if response has data
+            if (!response.data) {
+                throw new Error('No data received from server');
+            }
+
+            // Create blob from response
+            const blob = new Blob([response.data], { type: 'application/zip' });
+            console.log('Blob created, size:', blob.size);
+
+            if (blob.size === 0) {
+                throw new Error('Downloaded file is empty');
+            }
+
+            const url = URL.createObjectURL(blob);
+
+            // Create download link
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${model.name.replace(/\s+/g, '_')}_model.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            console.log('Model download completed successfully:', model.id);
+        } catch (error) {
+            console.error('Download failed with error:', error);
+            console.error('Error details:', {
+                message: error.message,
+                stack: error.stack,
+                response: error.response
+            });
+            setError(`Failed to download model: ${error.message}`);
+        }
+    };
+
     const handleExportModel = async (model) => {
         try {
             // Create a downloadable model package
@@ -277,14 +377,14 @@ const CustomModelManager = ({ onModelSelect, selectedModel }) => {
                     <div className="loading-spinner"></div>
                     <div>Loading custom models...</div>
                 </div>
-            ) : customModels.length === 0 ? (
+            ) : customModels.length === 0 && trainedModels.length === 0 ? (
                 <div className="empty-state">
                     <div className="empty-icon">📁</div>
                     <div className="empty-title">No Custom Models</div>
                     <div className="empty-description">
-                        Upload your own pre-trained models to use as starting points for training.
+                        Upload your own pre-trained models or train models to use as starting points.
                     </div>
-                    <button 
+                    <button
                         className="upload-btn primary"
                         onClick={() => setShowUpload(true)}
                     >
@@ -292,8 +392,79 @@ const CustomModelManager = ({ onModelSelect, selectedModel }) => {
                     </button>
                 </div>
             ) : (
-                <div className="models-grid">
-                    {customModels.map(model => (
+                <div className="models-container">
+                    {/* Trained Models Section */}
+                    {trainedModels.length > 0 && (
+                        <div className="models-section">
+                            <h4 className="section-title">🎓 Trained Models</h4>
+                            <div className="models-grid">
+                                {trainedModels.map(model => (
+                                    <div
+                                        key={model.id}
+                                        className={`model-card trained-model ${selectedModel?.id === model.id ? 'selected' : ''}`}
+                                        onClick={() => onModelSelect(model)}
+                                    >
+                                        <div className="model-header">
+                                            <div className="model-info">
+                                                <div className="model-name">{model.name}</div>
+                                                <div className="model-meta">
+                                                    <span className="model-size">{model.size}</span>
+                                                    <span className="model-subject">{model.subject}</span>
+                                                    {model.isRealModel && (
+                                                        <span className="real-model-badge">🧠 Real ML</span>
+                                                    )}
+                                                    {model.accuracy && (
+                                                        <span className="accuracy-badge">{model.accuracy}% acc</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="model-status">
+                                                <span className={`status-badge ${model.status}`}>
+                                                    {model.status === 'completed' ? '✅' : '⏳'}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="model-description">
+                                            {model.description}
+                                        </div>
+
+                                        {model.metrics && (
+                                            <div className="model-metrics">
+                                                <span className="metric">Loss: {model.metrics.loss}</span>
+                                                <span className="metric">BLEU: {model.metrics.bleu_score}</span>
+                                            </div>
+                                        )}
+
+                                        <div className="model-footer">
+                                            <span className="created-date">
+                                                Created: {formatDate(model.createdAt)}
+                                            </span>
+                                            <div className="model-actions">
+                                                <button
+                                                    className="download-btn"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDownloadTrainedModel(model);
+                                                    }}
+                                                    title="Download model"
+                                                >
+                                                    📥 Download
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Custom Uploaded Models Section */}
+                    {customModels.length > 0 && (
+                        <div className="models-section">
+                            <h4 className="section-title">📤 Uploaded Models</h4>
+                            <div className="models-grid">
+                                {customModels.map(model => (
                         <div 
                             key={model.id}
                             className={`model-card ${selectedModel?.id === model.id ? 'selected' : ''}`}
@@ -354,6 +525,9 @@ const CustomModelManager = ({ onModelSelect, selectedModel }) => {
                             )}
                         </div>
                     ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 

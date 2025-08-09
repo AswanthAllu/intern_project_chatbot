@@ -404,7 +404,22 @@ const ChatPage = ({ setIsAuthenticated }) => {
             setMessages(prev => [...prev, assistantMessage]);
         } catch (err) {
             console.error('MCP search error:', err);
-            setError(err.message || 'MCP search failed');
+
+            // Handle different types of MCP errors
+            let errorMessage = 'MCP search failed';
+
+            if (err.message && err.message.includes('Proxy error')) {
+                errorMessage = '🤖 MCP service is currently unavailable. The AI agent service may not be running.';
+                // Auto-disable MCP when service is unavailable
+                setIsMcpEnabled(false);
+            } else if (err.message && err.message.includes('503')) {
+                errorMessage = '🤖 MCP service is temporarily unavailable. Please try again later.';
+                setIsMcpEnabled(false);
+            } else {
+                errorMessage = err.message || 'MCP search failed';
+            }
+
+            setError(errorMessage);
             setMessages(prev => prev.slice(0, -1)); // Remove user message on error
         } finally {
             setLoadingStates(prev => ({ ...prev, chat: false }));

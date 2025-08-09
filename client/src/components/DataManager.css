@@ -485,3 +485,58 @@
 .validate-btn:hover {
     background: #e0a800;
 }
+
+/* Data Validation Info Styles */
+.validation-info {
+    margin: 20px 0;
+    padding: 20px;
+    background: var(--surface-color);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.validation-info h4 {
+    margin: 0 0 15px 0;
+    color: var(--primary-text-color);
+    font-size: 1.1rem;
+}
+
+.validation-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+}
+
+.validation-item {
+    padding: 15px;
+    background: var(--background-color);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+}
+
+.validation-item h5 {
+    margin: 0 0 10px 0;
+    color: var(--primary-text-color);
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.validation-item ul {
+    margin: 0;
+    padding-left: 18px;
+    color: var(--secondary-text-color);
+}
+
+.validation-item li {
+    margin: 6px 0;
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.validation-item code {
+    background: var(--surface-color);
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 0.8rem;
+    color: var(--primary-text-color);
+}

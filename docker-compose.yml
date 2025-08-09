@@ -1,0 +1,115 @@
+# =============================================================================
+# AI Chatbot Application - Docker Compose Configuration
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # Main application
+  ai-chatbot:
+    build: .
+    container_name: ai-chatbot-app
+    restart: unless-stopped
+    ports:
+      - "5005:5005"
+    environment:
+      - NODE_ENV=production
+      - PORT=5005
+      - HOST=0.0.0.0
+    env_file:
+      - server/.env
+    volumes:
+      - ./server/logs:/app/server/logs
+      - ./server/uploads:/app/server/uploads
+      - ./server/ml_training:/app/server/ml_training
+      - ./server/temp:/app/server/temp
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - ai-chatbot-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5005/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # MongoDB database
+  mongodb:
+    image: mongo:6.0
+    container_name: ai-chatbot-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: chatbotGeminiDB4
+    volumes:
+      - mongodb_data:/data/db
+      - ./backups:/backups
+    networks:
+      - ai-chatbot-network
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: ai-chatbot-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai-chatbot-network
+    command: redis-server --appendonly yes
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: ai-chatbot-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./server/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./client/build:/usr/share/nginx/html
+      - ./ssl:/etc/ssl/certs
+    depends_on:
+      - ai-chatbot
+    networks:
+      - ai-chatbot-network
+
+  # Ollama (optional)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai-chatbot-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - ai-chatbot-network
+    # Uncomment if you have GPU support
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local
+  ollama_data:
+    driver: local
+
+networks:
+  ai-chatbot-network:
+    driver: bridge

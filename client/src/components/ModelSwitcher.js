@@ -1,6 +1,7 @@
 // client/src/components/ModelSwitcher.js
 import React, { useState, useEffect } from 'react';
 import './ModelSwitcher.css';
+import { getTrainedModelsForChat } from '../services/api';
 import {
     Box, FormControl, Select, MenuItem, Typography, Chip, Tooltip, 
     IconButton, Alert, CircularProgress, Divider
@@ -29,7 +30,7 @@ const ModelSwitcher = ({
     const [error, setError] = useState('');
     const [modelStatus, setModelStatus] = useState({});
 
-    // Default models configuration - Only 2 models: Gemini and Llama
+    // Default models configuration - Popular LLM models
     const defaultModels = [
         {
             id: 'gemini-pro',
@@ -42,6 +43,16 @@ const ModelSwitcher = ({
             provider: 'Google'
         },
         {
+            id: 'gemini-flash',
+            name: 'Gemini Flash',
+            type: 'chat',
+            icon: <ChatIcon />,
+            description: 'Fast and efficient Google AI model',
+            specialties: ['Quick Responses', 'Chat', 'General'],
+            status: 'available',
+            provider: 'Google'
+        },
+        {
             id: 'llama-model',
             name: 'Llama Model',
             type: 'chat',
@@ -49,7 +60,27 @@ const ModelSwitcher = ({
             description: 'Advanced conversational AI model',
             specialties: ['Chat', 'Conversation', 'General'],
             status: 'available',
-            provider: 'Llama'
+            provider: 'Meta'
+        },
+        {
+            id: 'gpt-4',
+            name: 'GPT-4',
+            type: 'reasoning',
+            icon: <PsychologyIcon />,
+            description: 'OpenAI\'s most capable model',
+            specialties: ['Reasoning', 'Analysis', 'Complex Tasks'],
+            status: 'available',
+            provider: 'OpenAI'
+        },
+        {
+            id: 'claude-3',
+            name: 'Claude 3',
+            type: 'comprehensive',
+            icon: <PsychologyIcon />,
+            description: 'Anthropic\'s advanced AI assistant',
+            specialties: ['Analysis', 'Writing', 'Reasoning'],
+            status: 'available',
+            provider: 'Anthropic'
         }
     ];
 
@@ -93,8 +124,19 @@ const ModelSwitcher = ({
         setError('');
 
         try {
-            // Only use the 2 default models - no dynamic fetching
+            // Start with default models (Gemini Pro and LLM models)
             const allModels = [...defaultModels];
+
+            // Add trained models
+            try {
+                const trainedResponse = await getTrainedModelsForChat();
+                if (trainedResponse.data.success && trainedResponse.data.models.length > 0) {
+                    allModels.push(...trainedResponse.data.models);
+                    console.log(`🧠 Added ${trainedResponse.data.models.length} trained models`);
+                }
+            } catch (error) {
+                console.log('No trained models available or backend not connected');
+            }
 
 
 
@@ -104,7 +146,7 @@ const ModelSwitcher = ({
             setModels([]);
             setTimeout(() => {
                 setModels(allModels);
-                console.log(`🎉 Total models available: ${allModels.length} (Gemini + Llama only)`);
+                console.log(`🎉 Total models available: ${allModels.length} (${defaultModels.length} default + ${allModels.length - defaultModels.length} trained)`);
                 console.log('📊 Available models:', allModels.map(m => `${m.name} (${m.id})`));
             }, 100);
 

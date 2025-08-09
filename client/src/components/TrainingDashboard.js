@@ -5,11 +5,11 @@ import {
     getTrainingStatus,
     getTrainingProgress,
     startTrainingAPI,
-    stopTrainingAPI
+    stopTrainingAPI,
+    getOllamaStatus
 } from '../services/api';
 import DataManager from './DataManager';
 import AdvancedTrainingConfig from './AdvancedTrainingConfig';
-import DatabaseConfig from './DatabaseConfig';
 import OllamaConfig from './OllamaConfig';
 import './TrainingDashboard.css';
 
@@ -35,20 +35,20 @@ const TrainingDashboard = () => {
     const [models, setModels] = useState([]);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [username, setUsername] = useState('');
-    const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
-    const [advancedConfig, setAdvancedConfig] = useState({});
+    // const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
+    // const [advancedConfig, setAdvancedConfig] = useState({});
     const [trainingData, setTrainingData] = useState(null);
-    const [showDatabaseConfig, setShowDatabaseConfig] = useState(false);
-    const [databaseData, setDatabaseData] = useState(null);
+
     const [showOllamaConfig, setShowOllamaConfig] = useState(false);
     const [ollamaStatus, setOllamaStatus] = useState({ connected: false, baseUrl: '' });
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    // Foundational models removed - now handled in Advanced Training Configuration
 
-    const subjects = [
-        { id: 'mathematics', name: 'Mathematics', description: 'Arithmetic, algebra, geometry, calculus' },
-        { id: 'programming', name: 'Programming', description: 'Coding, algorithms, software development' },
-        { id: 'science', name: 'Science', description: 'Physics, chemistry, biology' },
-        { id: 'history', name: 'History', description: 'Historical events, civilizations' },
-        { id: 'literature', name: 'Literature', description: 'Books, poetry, literary analysis' }
+    // Predefined subject suggestions
+    const subjectSuggestions = [
+        'Mathematics', 'Programming', 'Science', 'History', 'Literature',
+        'Medicine', 'Law', 'Business', 'Art', 'Music', 'Philosophy', 'Psychology'
     ];
 
     const modelSizes = ['1B', '3B', '7B'];
@@ -65,13 +65,14 @@ const TrainingDashboard = () => {
         if (userId && storedUsername) {
             setIsAuthenticated(true);
             setUsername(storedUsername);
-            fetchModels();
-            fetchTrainingStatus();
+            initializeDashboard();
         } else {
-            console.warn('TrainingDashboard: User not authenticated, redirecting to login');
-            setIsAuthenticated(false);
-            // Optionally redirect to login or show login prompt
-            // navigate('/login');
+            // Try to get user info from other sources or allow demo mode
+            const demoUsername = 'Demo User';
+            console.warn('TrainingDashboard: User not authenticated, using demo mode');
+            setIsAuthenticated(true);
+            setUsername(demoUsername);
+            initializeDashboard();
         }
     }, []);
 
@@ -81,11 +82,32 @@ const TrainingDashboard = () => {
             fetchTrainingStatus();
             checkOllamaStatus();
         }
-    }, [isAuthenticated]);
+    }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const initializeDashboard = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+
+
+
+            await Promise.all([
+                fetchModels(),
+                fetchTrainingStatus(),
+                checkOllamaStatus()
+            ]);
+        } catch (err) {
+            console.error('Error initializing dashboard:', err);
+            setError('Failed to initialize dashboard. Some features may not work properly.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+
 
     const checkOllamaStatus = async () => {
         try {
-            const { getOllamaStatus } = await import('../services/api');
             const response = await getOllamaStatus();
             console.log('Ollama status response:', response.data);
             setOllamaStatus({
@@ -107,17 +129,25 @@ const TrainingDashboard = () => {
             const userId = localStorage.getItem('userId');
             if (!userId) {
                 console.warn('No user ID found in localStorage');
+                setModels([]);
                 return;
             }
 
             console.log('TrainingDashboard: Fetching models...');
             const response = await getTrainingModels();
-            setModels(response.data.models || []);
+            const fetchedModels = response.data.models || [];
+            console.log('Fetched models:', fetchedModels);
+            setModels(fetchedModels);
         } catch (error) {
             console.error('Error fetching models:', error);
             setModels([]);
+            addLog('Error fetching models - please check backend server connection');
         }
     };
+
+    // fetchFoundationalModels removed - now handled in Advanced Training Configuration
+
+
 
     const fetchTrainingStatus = async () => {
         try {
@@ -206,25 +236,7 @@ const TrainingDashboard = () => {
         }));
     };
 
-    const handleDatabaseDataExtracted = (extractedData) => {
-        setDatabaseData(extractedData);
-        setTrainingData(extractedData.data);
-        setShowDatabaseConfig(false);
 
-        // Update training config with database info
-        setTrainingConfig(prev => ({
-            ...prev,
-            dataSource: 'database',
-            dataFormat: extractedData.format,
-            dataValidation: extractedData.validation,
-            dataConfig: extractedData.config
-        }));
-
-        addLog(`Database data extracted: ${extractedData.data.length} samples in ${extractedData.format} format`);
-        if (extractedData.report) {
-            addLog(`Data quality: ${extractedData.report.summary.successRate.toFixed(1)}% success rate`);
-        }
-    };
 
     const handleOllamaConfigurationChange = (config) => {
         setOllamaStatus(config);
@@ -237,17 +249,198 @@ const TrainingDashboard = () => {
 
     const downloadModel = async (modelId) => {
         try {
-            const response = await fetch(`/api/training/download/${modelId}`);
+            console.log('📥 Attempting to download model:', modelId);
+            addLog(`Downloading model: ${modelId}...`);
+
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-User-ID': localStorage.getItem('userId') || '507f1f77bcf86cd799439011'
+            };
+
+            // Try both proxy and direct connection
+            const downloadUrls = [
+                `/api/training/download/${modelId}`, // Through proxy
+                `http://localhost:5005/api/training/download/${modelId}` // Direct
+            ];
+
+            let response = null;
+            let lastError = null;
+
+            for (const downloadUrl of downloadUrls) {
+                try {
+                    console.log('🌐 Trying download URL:', downloadUrl);
+
+                    response = await fetch(downloadUrl, {
+                        method: 'GET',
+                        headers: headers
+                    });
+
+                    console.log('📡 Download response status:', response.status);
+
+                    if (response.ok) {
+                        console.log(`✅ Download successful via ${downloadUrl}`);
+                        break; // Success, exit loop
+                    } else {
+                        const errorText = await response.text();
+                        console.error(`❌ Download failed via ${downloadUrl}:`, errorText);
+                        lastError = new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+                    }
+                } catch (urlError) {
+                    console.error(`❌ Error with ${downloadUrl}:`, urlError);
+                    lastError = urlError;
+                    response = null;
+                }
+            }
+
+            if (!response || !response.ok) {
+                throw lastError || new Error('All download attempts failed');
+            }
+
+            // Create download
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = `model_${modelId}.zip`;
+            document.body.appendChild(a); // Add to DOM for Firefox compatibility
             a.click();
+            document.body.removeChild(a); // Clean up
+            window.URL.revokeObjectURL(url); // Free memory
+
+            addLog(`✅ Model ${modelId} downloaded successfully`);
+            alert(`Model "${modelId}" has been downloaded successfully!`);
+
         } catch (error) {
-            addLog(`Error downloading model: ${error.message}`);
+            console.error('❌ Download model error:', error);
+            addLog(`❌ Error downloading model: ${error.message}`);
+            alert(`Failed to download model: ${error.message}`);
         }
     };
+
+    const deleteModel = async (modelId) => {
+        console.log('🗑️ Attempting to delete model:', modelId);
+        console.log('🔍 Current userId from localStorage:', localStorage.getItem('userId'));
+
+        if (!window.confirm(`Are you sure you want to delete the model "${modelId}"? This action cannot be undone.`)) {
+            console.log('❌ User cancelled deletion');
+            return;
+        }
+
+        try {
+            addLog(`Deleting model: ${modelId}...`);
+
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-User-ID': localStorage.getItem('userId') || '507f1f77bcf86cd799439011'
+            };
+            console.log('📋 Request headers:', headers);
+
+            // Try both proxy and direct connection
+            const deleteUrls = [
+                `/api/training/models/${modelId}`, // Through proxy
+                `http://localhost:5005/api/training/models/${modelId}` // Direct
+            ];
+
+            let response = null;
+            let lastError = null;
+
+            for (const deleteUrl of deleteUrls) {
+                try {
+                    console.log('🌐 Trying delete URL:', deleteUrl);
+
+                    response = await fetch(deleteUrl, {
+                        method: 'DELETE',
+                        headers: headers
+                    });
+
+                    console.log('📡 Delete response status:', response.status);
+
+                    if (response.ok) {
+                        console.log(`✅ Delete successful via ${deleteUrl}`);
+                        break; // Success, exit loop
+                    } else {
+                        const errorText = await response.text();
+                        console.error(`❌ Delete failed via ${deleteUrl}:`, errorText);
+                        lastError = new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+                    }
+                } catch (urlError) {
+                    console.error(`❌ Error with ${deleteUrl}:`, urlError);
+                    lastError = urlError;
+                    response = null;
+                }
+            }
+
+            if (!response || !response.ok) {
+                throw lastError || new Error('All delete attempts failed');
+            }
+
+            console.log('📡 Delete response status:', response.status);
+            console.log('📡 Delete response headers:', Object.fromEntries(response.headers.entries()));
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('❌ Delete error response:', errorText);
+
+                // Check if it's a proxy error
+                if (errorText.includes('Proxy error') || errorText.includes('ECONNREFUSED')) {
+                    throw new Error(`Backend server not available. Please ensure the server is running on port 5005.`);
+                }
+
+                throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+            }
+
+            let result;
+            try {
+                result = await response.json();
+                console.log('✅ Delete result:', result);
+            } catch (jsonError) {
+                console.error('❌ Failed to parse JSON response:', jsonError);
+                const responseText = await response.text();
+                console.error('❌ Raw response:', responseText);
+                throw new Error(`Invalid JSON response from server: ${responseText.substring(0, 100)}...`);
+            }
+
+            if (result.success) {
+                addLog(`✅ Model ${modelId} deleted successfully`);
+                console.log('🔄 Refreshing models list...');
+                await fetchModels(); // Refresh the models list
+                alert(`Model "${modelId}" has been deleted successfully!`);
+            } else {
+                throw new Error(result.error || 'Failed to delete model');
+            }
+        } catch (error) {
+            console.error('❌ Delete model error:', error);
+            addLog(`❌ Error deleting model: ${error.message}`);
+            alert(`Failed to delete model: ${error.message}`);
+        }
+    };
+
+
+
+    // Show loading state
+    if (loading) {
+        return (
+            <div className="training-dashboard">
+                <div className="dashboard-header">
+                    <div className="header-nav">
+                        <button
+                            onClick={() => navigate('/chat')}
+                            className="back-button"
+                            title="Back to Chat"
+                        >
+                            ← Back to Chat
+                        </button>
+                    </div>
+                    <h1>🧠 LLM Training Dashboard</h1>
+                    <div className="auth-prompt">
+                        <h2>Loading Dashboard...</h2>
+                        <p>Please wait while we initialize the training environment.</p>
+                        <div className="loading-spinner">🔄</div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     // Show login prompt if not authenticated
     if (!isAuthenticated) {
@@ -293,6 +486,8 @@ const TrainingDashboard = () => {
                 </div>
                 <h1>🧠 LLM Training Dashboard</h1>
                 <p>Welcome, {username}! Train specialized subject-specific language models</p>
+
+
             </div>
 
             <div className="dashboard-grid">
@@ -302,44 +497,7 @@ const TrainingDashboard = () => {
                     onDataUpdate={fetchModels}
                 />
 
-                {/* Database Integration */}
-                <div className="dashboard-section">
-                    <div className="section-header">
-                        <h3>🗄️ Database Integration</h3>
-                        <button
-                            className="config-btn"
-                            onClick={() => setShowDatabaseConfig(!showDatabaseConfig)}
-                        >
-                            {showDatabaseConfig ? 'Hide' : 'Configure Database'}
-                        </button>
-                    </div>
 
-                    {databaseData && (
-                        <div className="database-summary">
-                            <div className="summary-item">
-                                <strong>Source:</strong> {databaseData.format} from database
-                            </div>
-                            <div className="summary-item">
-                                <strong>Records:</strong> {databaseData.data.length}
-                            </div>
-                            <div className="summary-item">
-                                <strong>Quality:</strong> {databaseData.report?.summary.successRate.toFixed(1)}% success rate
-                            </div>
-                            {databaseData.validation?.errors?.length > 0 && (
-                                <div className="summary-item error">
-                                    <strong>Issues:</strong> {databaseData.validation.errors.length} errors, {databaseData.validation.warnings.length} warnings
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {showDatabaseConfig && (
-                        <DatabaseConfig
-                            onDataExtracted={handleDatabaseDataExtracted}
-                            selectedSubject={selectedSubject}
-                        />
-                    )}
-                </div>
 
                 {/* Ollama Configuration */}
                 <div className="dashboard-section">
@@ -395,24 +553,44 @@ const TrainingDashboard = () => {
                     <h2>Training Configuration</h2>
                     
                     <div className="form-group">
-                        <label>Subject Domain</label>
-                        <select 
-                            value={selectedSubject} 
+                        <label>Custom Subject Domain</label>
+                        <input
+                            type="text"
+                            value={selectedSubject}
                             onChange={(e) => setSelectedSubject(e.target.value)}
+                            placeholder="Enter your subject domain (e.g., Mathematics, Programming, Medicine...)"
                             disabled={trainingStatus === 'training'}
-                        >
-                            {subjects.map(subject => (
-                                <option key={subject.id} value={subject.id}>
-                                    {subject.name} - {subject.description}
-                                </option>
+                            className="subject-input"
+                        />
+                        <div className="subject-suggestions">
+                            <small>Suggestions: </small>
+                            {subjectSuggestions.map(suggestion => (
+                                <button
+                                    key={suggestion}
+                                    type="button"
+                                    className="suggestion-btn"
+                                    onClick={() => setSelectedSubject(suggestion.toLowerCase())}
+                                    disabled={trainingStatus === 'training'}
+                                >
+                                    {suggestion}
+                                </button>
                             ))}
-                        </select>
+                        </div>
+                    </div>
+
+                    {/* Foundation Model selection moved to Advanced Training Configuration */}
+                    <div className="info-card">
+                        <div className="info-icon">💡</div>
+                        <div className="info-content">
+                            <strong>Model Selection</strong>
+                            <p>Use the <strong>Advanced Training Configuration</strong> below to select foundation models, custom models, or Ollama models for training.</p>
+                        </div>
                     </div>
 
                     <div className="form-group">
                         <label>Model Size</label>
-                        <select 
-                            value={trainingConfig.modelSize} 
+                        <select
+                            value={trainingConfig.modelSize}
                             onChange={(e) => handleConfigChange('modelSize', e.target.value)}
                             disabled={trainingStatus === 'training'}
                         >
@@ -482,7 +660,7 @@ const TrainingDashboard = () => {
                         subject={selectedSubject}
                         config={trainingConfig}
                         onConfigChange={setTrainingConfig}
-                        availableSubjects={['mathematics', 'programming', 'science', 'history', 'literature']}
+                        availableSubjects={subjectSuggestions.map(s => s.toLowerCase())}
                     />
 
                     <div className="training-controls">
@@ -529,9 +707,20 @@ const TrainingDashboard = () => {
                 {/* Trained Models */}
                 <div className="models-panel">
                     <h2>Trained Models</h2>
+                    <button
+                        className="refresh-btn"
+                        onClick={fetchModels}
+                        style={{ marginBottom: '15px' }}
+                    >
+                        🔄 Refresh Models
+                    </button>
                     <div className="models-list">
                         {models.length === 0 ? (
-                            <p>No trained models yet. Start training to create your first model!</p>
+                            <div className="no-models-message">
+                                <p>No trained models yet.</p>
+                                <p>Start training to create your first model!</p>
+                                <small>If you have trained models but they're not showing, try refreshing or check if the backend server is running.</small>
+                            </div>
                         ) : (
                             models.map(model => (
                                 <div key={model.id} className="model-card">
@@ -541,11 +730,38 @@ const TrainingDashboard = () => {
                                         <p>Trained: {new Date(model.createdAt).toLocaleDateString()}</p>
                                     </div>
                                     <div className="model-actions">
-                                        <button 
-                                            className="btn-secondary"
-                                            onClick={() => downloadModel(model.id)}
+                                        <button
+                                            className="btn-secondary download-btn"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                console.log('📥 Download button clicked for model:', model.id);
+                                                downloadModel(model.id);
+                                            }}
+                                            style={{
+                                                cursor: 'pointer',
+                                                pointerEvents: 'auto',
+                                                zIndex: 10
+                                            }}
                                         >
                                             📥 Download
+                                        </button>
+                                        <button
+                                            className="btn-danger delete-btn"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                console.log('🗑️ Delete button clicked for model:', model.id);
+                                                deleteModel(model.id);
+                                            }}
+                                            title={`Delete ${model.subject} model`}
+                                            style={{
+                                                cursor: 'pointer',
+                                                pointerEvents: 'auto',
+                                                zIndex: 10
+                                            }}
+                                        >
+                                            🗑️ Delete
                                         </button>
                                     </div>
                                 </div>

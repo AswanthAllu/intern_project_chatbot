@@ -6,10 +6,39 @@ dist/
 build/
 .DS_Store
 *.log
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# ML Training artifacts (exclude large files)
+server/ml_training/models/*/
+server/ml_training/datasets/*/
+server/ml_training/checkpoints/
+server/ml_training/training_data/
+
+# Logs and temporary files
+logs/
+server/logs/
+server/temp/
+server/test_*.zip
+server/test_*.tar.gz
+
+# Environment files (keep templates)
+!server/.env.linux
+
+# Backup files
+backups/
+*.backup
+
 # OS
 Thumbs.db
+
 # VSCode
 .vscode/
+
 # Misc
 *.tgz
-.idea/ 
+.idea/
